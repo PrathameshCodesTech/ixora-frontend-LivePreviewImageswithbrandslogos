@@ -3129,15 +3129,16 @@ const ImageTemplateForm = ({ onSubmit, onCancel }) => {
         color: "#000000",
       },
     },
-    brandAreaSettings: {
-    enabled: false,
-    x: 50,
-    y: 400,
-    width: 700,
-    height: 150,
-    brandWidth: 150,
-    brandHeight: 90,
-  },
+brandAreaSettings: {
+  enabled: false,
+  x: 50,
+  y: 400,
+  width: 700,
+  height: 150,
+  slots: [
+    {id: 1, x: 0, y: 0, width: 100, height: 60},
+  ],
+},
   });
 
   const [previewImage, setPreviewImage] = useState(null);
@@ -3365,6 +3366,25 @@ const ImageTemplateForm = ({ onSubmit, onCancel }) => {
     },
   }));
 };
+
+window.updateSlotPositionFromPreview = (slotId, x, y) => {
+    setFormData((prev) => {
+      const newSlots = [...(prev.brandAreaSettings.slots || [])];
+      const slotIndex = newSlots.findIndex(slot => slot.id === slotId);
+      if (slotIndex !== -1) {
+        newSlots[slotIndex] = { ...newSlots[slotIndex], x: x, y: y };
+      }
+      return {
+        ...prev,
+        brandAreaSettings: {
+          ...prev.brandAreaSettings,
+          slots: newSlots
+        }
+      };
+    });
+  };
+
+
   const handleSubmit = async (e) => {
     e.preventDefault();
 
@@ -3489,116 +3509,140 @@ const finalFormData = {
         </div>
 
         {/* Font & Color Controls */}
-        <div className="grid grid-cols-2 gap-3">
-          {/* Font Size */}
-          <div>
-            <label className="text-xs text-gray-600 mb-1 block">
-              Font Size
-            </label>
-            <input
-              type="range"
-              min="20"
-              max="80"
-              value={formData.textPositions.customText?.fontSize || 48}
-              onChange={(e) =>
-                updatePosition("customText", "fontSize", e.target.value)
-              }
-              className="w-full"
-            />
-            <span className="text-xs text-gray-500">
-              {formData.textPositions.customText?.fontSize || 48}px
-            </span>
-          </div>
+{/* Font & Color Controls */}
+<div className="grid grid-cols-3 gap-3">
+  {/* Font Size */}
+  <div>
+    <label className="text-xs text-gray-600 mb-1 block">
+      Font Size
+    </label>
+    <input
+      type="range"
+      min="20"
+      max="80"
+      value={formData.textPositions.customText?.fontSize || 48}
+      onChange={(e) =>
+        updatePosition("customText", "fontSize", e.target.value)
+      }
+      className="w-full"
+    />
+    <span className="text-xs text-gray-500">
+      {formData.textPositions.customText?.fontSize || 48}px
+    </span>
+  </div>
 
-          {/* Text Color */}
-          <div>
-            <label className="text-xs text-gray-600 mb-1 block">
-              Text Color
-            </label>
-            <div className="flex items-center space-x-2">
-              <input
-                type="color"
-                value={formData.textPositions.customText?.color || "#0000ff"}
-                onChange={(e) => {
-                  console.log("🎨 Color changed to:", e.target.value); // DEBUG
-                  updatePosition("customText", "color", e.target.value);
-                }}
-                className="w-8 h-8 rounded border border-gray-300"
-              />
-              <input
-                type="text"
-                value={formData.textPositions.customText?.color || "#0000ff"}
-                onChange={(e) =>
-                  updatePosition("customText", "color", e.target.value)
-                }
-                className="flex-1 px-2 py-1 text-xs border border-gray-300 rounded"
-                placeholder="#0000ff"
-              />
-            </div>
-          </div>
+  {/* Text Color */}
+  <div>
+    <label className="text-xs text-gray-600 mb-1 block">
+      Text Color
+    </label>
+    <div className="flex items-center space-x-2">
+      <input
+        type="color"
+        value={formData.textPositions.customText?.color || "#0000ff"}
+        onChange={(e) => {
+          console.log("Color changed to:", e.target.value);
+          updatePosition("customText", "color", e.target.value);
+        }}
+        className="w-8 h-8 rounded border border-gray-300"
+      />
+      <input
+        type="text"
+        value={formData.textPositions.customText?.color || "#0000ff"}
+        onChange={(e) =>
+          updatePosition("customText", "color", e.target.value)
+        }
+        className="flex-1 px-2 py-1 text-xs border border-gray-300 rounded"
+        placeholder="#0000ff"
+      />
+    </div>
+  </div>
 
-          {/* Font Family */}
-          <div>
-            <label className="text-xs text-gray-600 mb-1 block">
-              Font Family
-            </label>
-            <select
-              value={formData.textPositions.customText?.fontFamily || "Arial"}
-              onChange={(e) => {
-                console.log("📝 Font changed to:", e.target.value); // DEBUG
-                updatePosition("customText", "fontFamily", e.target.value);
-              }}
-              className="w-full px-2 py-1 text-xs border border-gray-300 rounded"
-            >
-              <option value="Arial">Arial</option>
-              <option value="Times New Roman">Times New Roman</option>
-              <option value="Helvetica">Helvetica</option>
-              <option value="Georgia">Georgia</option>
-              <option value="Verdana">Verdana</option>
-              <option value="Impact">Impact</option>
-              <option value="Comic Sans MS">Comic Sans MS</option>
-            </select>
-          </div>
+  {/* Font Family */}
+  <div>
+    <label className="text-xs text-gray-600 mb-1 block">
+      Font Family
+    </label>
+    <select
+      value={formData.textPositions.customText?.fontFamily || "Arial"}
+      onChange={(e) => {
+        console.log("Font changed to:", e.target.value);
+        updatePosition("customText", "fontFamily", e.target.value);
+      }}
+      className="w-full px-2 py-1 text-xs border border-gray-300 rounded"
+    >
+      <option value="Arial">Arial</option>
+<option value="Times New Roman">Times New Roman</option>
+<option value="Helvetica">Helvetica</option>
+<option value="Georgia">Georgia</option>
+<option value="Verdana">Verdana</option>
+<option value="Impact">Impact</option>
+<option value="Comic Sans MS">Comic Sans MS</option>
+<option value="Dancing Script">Dancing Script (Cursive)</option>
+<option value="Great Vibes">Great Vibes (Elegant Cursive)</option>
+<option value="Pacifico">Pacifico (Bold Cursive)</option>
+<option value="Allura">Allura (Script)</option>
+<option value="Alex Brush">Alex Brush (Handwritten)</option>
+    </select>
+  </div>
 
-          {/* Font Weight */}
-          <div>
-            <label className="text-xs text-gray-600 mb-1 block">
-              Font Weight
-            </label>
-            <select
-              value={formData.textPositions.customText?.fontWeight || "bold"}
-              onChange={(e) =>
-                updatePosition("customText", "fontWeight", e.target.value)
-              }
-              className="w-full px-2 py-1 text-xs border border-gray-300 rounded"
-            >
-              <option value="normal">Normal</option>
-              <option value="bold">Bold</option>
-              <option value="600">Semi Bold</option>
-              <option value="800">Extra Bold</option>
-            </select>
-          </div>
+  {/* Font Weight */}
+  <div>
+    <label className="text-xs text-gray-600 mb-1 block">
+      Font Weight
+    </label>
+    <select
+      value={formData.textPositions.customText?.fontWeight || "bold"}
+      onChange={(e) =>
+        updatePosition("customText", "fontWeight", e.target.value)
+      }
+      className="w-full px-2 py-1 text-xs border border-gray-300 rounded"
+    >
+      <option value="normal">Normal</option>
+      <option value="bold">Bold</option>
+      <option value="600">Semi Bold</option>
+      <option value="800">Extra Bold</option>
+    </select>
+  </div>
 
-          {/* Text Shadow */}
-          <div>
-            <label className="text-xs text-gray-600 mb-1 block">
-              Text Shadow
-            </label>
-            <select
-              value={formData.textPositions.customText?.textShadow || "none"}
-              onChange={(e) =>
-                updatePosition("customText", "textShadow", e.target.value)
-              }
-              className="w-full px-2 py-1 text-xs border border-gray-300 rounded"
-            >
-              <option value="none">None</option>
-              <option value="1px 1px 2px rgba(0,0,0,0.5)">Light Shadow</option>
-              <option value="2px 2px 4px rgba(0,0,0,0.7)">Medium Shadow</option>
-              <option value="3px 3px 6px rgba(0,0,0,0.9)">Heavy Shadow</option>
-            </select>
-          </div>
-        </div>
-      </div>
+  {/* Font Style (Italic/Cursive) */}
+  <div>
+    <label className="text-xs text-gray-600 mb-1 block">
+      Font Style
+    </label>
+    <select
+      value={formData.textPositions.customText?.fontStyle || "normal"}
+      onChange={(e) =>
+        updatePosition("customText", "fontStyle", e.target.value)
+      }
+      className="w-full px-2 py-1 text-xs border border-gray-300 rounded"
+    >
+      <option value="normal">Normal</option>
+      <option value="italic">Italic</option>
+      <option value="oblique">Oblique</option>
+    </select>
+  </div>
+
+  {/* Text Shadow */}
+  <div>
+    <label className="text-xs text-gray-600 mb-1 block">
+      Text Shadow
+    </label>
+    <select
+      value={formData.textPositions.customText?.textShadow || "none"}
+      onChange={(e) =>
+        updatePosition("customText", "textShadow", e.target.value)
+      }
+      className="w-full px-2 py-1 text-xs border border-gray-300 rounded"
+    >
+      <option value="none">None</option>
+      <option value="1px 1px 2px rgba(0,0,0,0.5)">Light Shadow</option>
+      <option value="2px 2px 4px rgba(0,0,0,0.7)">Medium Shadow</option>
+      <option value="3px 3px 6px rgba(0,0,0,0.9)">Heavy Shadow</option>
+    </select>
+  </div>
+</div>
+</div>
 
       {/* Doctor Image Settings */}
       <div className="space-y-3 p-4 bg-green-50 border border-green-200 rounded-lg">
@@ -3877,58 +3921,82 @@ const finalFormData = {
 
               {/* Advanced Controls */}
               {/* Advanced Controls */}
-              <div className="grid grid-cols-3 gap-2">
-                <div>
-                  <label className="text-xs text-gray-600">Font</label>
-                  <select
-                    value={
-                      formData.textPositions[fieldName]?.fontFamily || "Arial"
-                    }
-                    onChange={(e) =>
-                      updatePosition(fieldName, "fontFamily", e.target.value)
-                    }
-                    className="w-full px-2 py-1 text-xs border border-gray-300 rounded"
-                  >
-                    <option value="Arial">Arial</option>
-                    <option value="Times New Roman">Times</option>
-                    <option value="Helvetica">Helvetica</option>
-                    <option value="Georgia">Georgia</option>
-                    <option value="Verdana">Verdana</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="text-xs text-gray-600">Weight</label>
-                  <select
-                    value={
-                      formData.textPositions[fieldName]?.fontWeight || "normal"
-                    }
-                    onChange={(e) =>
-                      updatePosition(fieldName, "fontWeight", e.target.value)
-                    }
-                    className="w-full px-2 py-1 text-xs border border-gray-300 rounded"
-                  >
-                    <option value="normal">Normal</option>
-                    <option value="bold">Bold</option>
-                    <option value="600">Semi Bold</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="text-xs text-gray-600">Shadow</label>
-                  <select
-                    value={
-                      formData.textPositions[fieldName]?.textShadow || "none"
-                    }
-                    onChange={(e) =>
-                      updatePosition(fieldName, "textShadow", e.target.value)
-                    }
-                    className="w-full px-2 py-1 text-xs border border-gray-300 rounded"
-                  >
-                    <option value="none">None</option>
-                    <option value="1px 1px 2px rgba(0,0,0,0.5)">Light</option>
-                    <option value="2px 2px 4px rgba(0,0,0,0.7)">Medium</option>
-                  </select>
-                </div>
-              </div>
+              {/* Advanced Controls */}
+<div className="grid grid-cols-4 gap-2">
+  <div>
+    <label className="text-xs text-gray-600">Font</label>
+    <select
+      value={
+        formData.textPositions[fieldName]?.fontFamily || "Arial"
+      }
+      onChange={(e) =>
+        updatePosition(fieldName, "fontFamily", e.target.value)
+      }
+      className="w-full px-2 py-1 text-xs border border-gray-300 rounded"
+    >
+<option value="Arial">Arial</option>
+<option value="Times New Roman">Times New Roman</option>
+<option value="Helvetica">Helvetica</option>
+<option value="Georgia">Georgia</option>
+<option value="Verdana">Verdana</option>
+<option value="Impact">Impact</option>
+<option value="Comic Sans MS">Comic Sans MS</option>
+<option value="Dancing Script">Dancing Script (Cursive)</option>
+<option value="Great Vibes">Great Vibes (Elegant Cursive)</option>
+<option value="Pacifico">Pacifico (Bold Cursive)</option>
+<option value="Allura">Allura (Script)</option>
+<option value="Alex Brush">Alex Brush (Handwritten)</option>
+    </select>
+  </div>
+  <div>
+    <label className="text-xs text-gray-600">Weight</label>
+    <select
+      value={
+        formData.textPositions[fieldName]?.fontWeight || "normal"
+      }
+      onChange={(e) =>
+        updatePosition(fieldName, "fontWeight", e.target.value)
+      }
+      className="w-full px-2 py-1 text-xs border border-gray-300 rounded"
+    >
+      <option value="normal">Normal</option>
+      <option value="bold">Bold</option>
+      <option value="600">Semi Bold</option>
+    </select>
+  </div>
+  <div>
+    <label className="text-xs text-gray-600">Style</label>
+    <select
+      value={
+        formData.textPositions[fieldName]?.fontStyle || "normal"
+      }
+      onChange={(e) =>
+        updatePosition(fieldName, "fontStyle", e.target.value)
+      }
+      className="w-full px-2 py-1 text-xs border border-gray-300 rounded"
+    >
+      <option value="normal">Normal</option>
+      <option value="italic">Italic</option>
+      <option value="oblique">Oblique</option>
+    </select>
+  </div>
+  <div>
+    <label className="text-xs text-gray-600">Shadow</label>
+    <select
+      value={
+        formData.textPositions[fieldName]?.textShadow || "none"
+      }
+      onChange={(e) =>
+        updatePosition(fieldName, "textShadow", e.target.value)
+      }
+      className="w-full px-2 py-1 text-xs border border-gray-300 rounded"
+    >
+      <option value="none">None</option>
+      <option value="1px 1px 2px rgba(0,0,0,0.5)">Light</option>
+      <option value="2px 2px 4px rgba(0,0,0,0.7)">Medium</option>
+    </select>
+  </div>
+</div>
             </div>
           ))}
           {/* Brand Area Settings */}
@@ -4015,44 +4083,151 @@ const finalFormData = {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-3">
-  <div>
-    <label className="text-xs text-gray-600 mb-1 block">
-      Brand Logo Width (px)
-    </label>
-    <input
-      type="number"
-      min="50"
-      max="300"
-      value={formData.brandAreaSettings.brandWidth || 100}
-      onChange={(e) => updateBrandAreaSetting("brandWidth", e.target.value)}
-      className="w-full px-2 py-1 border border-gray-300 rounded text-xs"
-    />
-    <span className="text-xs text-gray-500">Current: {formData.brandAreaSettings.brandWidth || 100}px</span>
+{/* Brand Slots Management */}
+<div className="space-y-3">
+  <div className="flex justify-between items-center">
+    <label className="text-xs text-gray-600 font-medium">Brand Slots</label>
+    <button
+      type="button"
+      onClick={() => {
+        const newSlots = [...(formData.brandAreaSettings.slots || [])];
+        const newId = newSlots.length + 1;
+        newSlots.push({
+          id: newId,
+          x: 0,
+          y: newSlots.length * 70,
+          width: 100,
+          height: 60
+        });
+        setFormData(prev => ({
+          ...prev,
+          brandAreaSettings: {
+            ...prev.brandAreaSettings,
+            slots: newSlots
+          }
+        }));
+      }}
+      className="px-2 py-1 bg-green-500 text-white text-xs rounded hover:bg-green-600"
+    >
+      + Add Slot
+    </button>
   </div>
-  <div>
-    <label className="text-xs text-gray-600 mb-1 block">
-      Brand Logo Height (px)
-    </label>
-    <input
-      type="number"
-      min="30"
-      max="200"
-      value={formData.brandAreaSettings.brandHeight || 60}
-      onChange={(e) => updateBrandAreaSetting("brandHeight", e.target.value)}
-      className="w-full px-2 py-1 border border-gray-300 rounded text-xs"
-    />
-    <span className="text-xs text-gray-500">Current: {formData.brandAreaSettings.brandHeight || 60}px</span>
-  </div>
-</div>
 
-<div className="text-xs text-gray-500 p-2 bg-gray-100 rounded mt-2">
-  Preview: Brands will appear as {formData.brandAreaSettings.brandWidth || 100} × {formData.brandAreaSettings.brandHeight || 60} pixels when this template is used
-</div>
-
-      <div className="text-xs text-gray-500 p-2 bg-gray-100 rounded">
-        Brands will be automatically arranged in this area when users create content
+  {(formData.brandAreaSettings.slots || []).map((slot, index) => (
+    <div key={slot.id} className="p-3 border border-gray-200 rounded-lg bg-gray-50">
+      <div className="flex justify-between items-center mb-2">
+        <span className="text-xs font-medium text-gray-700">Slot {slot.id}</span>
+        {formData.brandAreaSettings.slots.length > 1 && (
+          <button
+            type="button"
+            onClick={() => {
+              const newSlots = formData.brandAreaSettings.slots.filter(s => s.id !== slot.id);
+              setFormData(prev => ({
+                ...prev,
+                brandAreaSettings: {
+                  ...prev.brandAreaSettings,
+                  slots: newSlots
+                }
+              }));
+            }}
+            className="px-2 py-1 bg-red-500 text-white text-xs rounded hover:bg-red-600"
+          >
+            Remove
+          </button>
+        )}
       </div>
+      
+      <div className="grid grid-cols-2 gap-2">
+        <div>
+          <label className="text-xs text-gray-600">X Position</label>
+          <input
+            type="number"
+            min="0"
+            value={slot.x}
+            onChange={(e) => {
+              const newSlots = [...formData.brandAreaSettings.slots];
+              newSlots[index] = {...slot, x: parseInt(e.target.value)};
+              setFormData(prev => ({
+                ...prev,
+                brandAreaSettings: {
+                  ...prev.brandAreaSettings,
+                  slots: newSlots
+                }
+              }));
+            }}
+            className="w-full px-2 py-1 border border-gray-300 rounded text-xs"
+          />
+        </div>
+        <div>
+          <label className="text-xs text-gray-600">Y Position</label>
+          <input
+            type="number"
+            min="0"
+            value={slot.y}
+            onChange={(e) => {
+              const newSlots = [...formData.brandAreaSettings.slots];
+              newSlots[index] = {...slot, y: parseInt(e.target.value)};
+              setFormData(prev => ({
+                ...prev,
+                brandAreaSettings: {
+                  ...prev.brandAreaSettings,
+                  slots: newSlots
+                }
+              }));
+            }}
+            className="w-full px-2 py-1 border border-gray-300 rounded text-xs"
+          />
+        </div>
+        <div>
+          <label className="text-xs text-gray-600">Width</label>
+          <input
+            type="number"
+            min="50"
+            max="300"
+            value={slot.width}
+            onChange={(e) => {
+              const newSlots = [...formData.brandAreaSettings.slots];
+              newSlots[index] = {...slot, width: parseInt(e.target.value)};
+              setFormData(prev => ({
+                ...prev,
+                brandAreaSettings: {
+                  ...prev.brandAreaSettings,
+                  slots: newSlots
+                }
+              }));
+            }}
+            className="w-full px-2 py-1 border border-gray-300 rounded text-xs"
+          />
+        </div>
+        <div>
+          <label className="text-xs text-gray-600">Height</label>
+          <input
+            type="number"
+            min="30"
+            max="200"
+            value={slot.height}
+            onChange={(e) => {
+              const newSlots = [...formData.brandAreaSettings.slots];
+              newSlots[index] = {...slot, height: parseInt(e.target.value)};
+              setFormData(prev => ({
+                ...prev,
+                brandAreaSettings: {
+                  ...prev.brandAreaSettings,
+                  slots: newSlots
+                }
+              }));
+            }}
+            className="w-full px-2 py-1 border border-gray-300 rounded text-xs"
+          />
+        </div>
+      </div>
+    </div>
+  ))}
+
+  <div className="text-xs text-gray-500 p-2 bg-gray-100 rounded">
+    Total Slots: {(formData.brandAreaSettings.slots || []).length} | Brands will fill slots in order and auto-center when fewer brands selected
+  </div>
+</div>
     </>
   )}
 </div>
@@ -4143,6 +4318,12 @@ const finalFormData = {
 <head>
   <title>Live Template Preview</title>
   <style>
+  
+@import url('https://fonts.googleapis.com/css2?family=Dancing+Script:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Pacifico&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Great+Vibes&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Allura&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Alex+Brush&display=swap');
     body { margin: 0; padding: 20px; font-family: Arial, sans-serif; background: #f0f0f0; }
     .container { max-width: 1000px; margin: 0 auto; background: white; border-radius: 8px; padding: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
     .canvas { position: relative; border: 2px solid #333; margin: 20px auto; background-size: cover; background-repeat: no-repeat; background-position: center; overflow: hidden; }
@@ -4166,6 +4347,31 @@ const finalFormData = {
   background: rgba(147, 51, 234, 0.2); 
   transform: scale(1.02); 
 }
+.brand-slot {
+  position: absolute;
+  border: 2px dashed #f59e0b;
+  background: rgba(245, 158, 11, 0.1);
+  cursor: move;
+  box-sizing: border-box;
+  transition: all 0.2s ease;
+}
+.brand-slot:hover {
+  background: rgba(245, 158, 11, 0.2);
+  border-color: #d97706;
+}
+
+.cursive-text {
+    font-family: 'Dancing Script', cursive;
+    font-weight: 500;
+}
+
+.elegant-cursive {
+    font-family: 'Great Vibes', cursive;
+}
+
+.bold-cursive {
+    font-family: 'Pacifico', cursive;
+}
   </style>
 </head>
 <body>
@@ -4183,9 +4389,11 @@ const finalFormData = {
   </div>
   
   <script>
-    let isDragging = false;
-    let currentElement = null;
-    let dragOffset = { x: 0, y: 0 };
+let isDragging = false;
+let currentElement = null;
+let dragOffset = { x: 0, y: 0 };
+let dragType = 'normal';
+let currentSlotId = null;
     
     const CANVAS_WIDTH = ${canvasWidth};
     const CANVAS_HEIGHT = ${canvasHeight};
@@ -4208,19 +4416,31 @@ const finalFormData = {
     }
     
     function applyElementStyles(element, position) {
-      element.style.left = (position.x || 0) + 'px';
-      element.style.top = (position.y || 0) + 'px';
-      element.style.fontSize = (position.fontSize || 32) + 'px';
-      element.style.color = position.color || '#000000';
-      element.style.fontFamily = position.fontFamily || 'Arial';
-      element.style.fontWeight = position.fontWeight || 'normal';
-      
-      if (position.textShadow && position.textShadow !== 'none') {
-        element.style.textShadow = position.textShadow;
-      } else {
-        element.style.textShadow = '';
-      }
-    }
+  element.style.left = (position.x || 0) + 'px';
+  element.style.top = (position.y || 0) + 'px';
+  element.style.fontSize = (position.fontSize || 32) + 'px';
+  element.style.color = position.color || '#000000';
+  
+  // Map font family names to web font names for preview
+  const fontFamily = position.fontFamily || 'Arial';
+  const webFontMap = {
+    'Dancing Script': '"Dancing Script", cursive',
+    'Great Vibes': '"Great Vibes", cursive',
+    'Pacifico': '"Pacifico", cursive',
+    'Allura': '"Allura", cursive',
+    'Alex Brush': '"Alex Brush", cursive'
+  };
+  
+  element.style.fontFamily = webFontMap[fontFamily] || fontFamily;
+  element.style.fontWeight = position.fontWeight || 'normal';
+  element.style.fontStyle = position.fontStyle || 'normal';
+  
+  if (position.textShadow && position.textShadow !== 'none') {
+    element.style.textShadow = position.textShadow;
+  } else {
+    element.style.textShadow = '';
+  }
+}
     
     function updateElementStyle(fieldName, position, text) {
       const element = document.querySelector('[data-field="' + fieldName + '"]');
@@ -4357,8 +4577,49 @@ const finalFormData = {
   label.style.borderRadius = '4px';
   label.style.fontSize = '12px';
   label.style.fontWeight = 'bold';
-  label.textContent = 'Brand Area (' + brandAreaSettings.brandWidth + '×' + brandAreaSettings.brandHeight + ' each)';
+  const slotsCount = brandAreaSettings.slots ? brandAreaSettings.slots.length : 0;
+  label.textContent = 'Brand Area (' + slotsCount + ' slots)';
   areaElement.appendChild(label);
+  
+  // Create individual brand slots
+  if (brandAreaSettings.slots) {
+    brandAreaSettings.slots.forEach((slot, index) => {
+      const slotElement = document.createElement('div');
+      slotElement.className = 'brand-slot';
+      slotElement.dataset.slotId = slot.id;
+      slotElement.style.position = 'absolute';
+      slotElement.style.left = slot.x + 'px';
+      slotElement.style.top = slot.y + 'px';
+      slotElement.style.width = slot.width + 'px';
+      slotElement.style.height = slot.height + 'px';
+      slotElement.style.border = '2px dashed #f59e0b';
+      slotElement.style.backgroundColor = 'rgba(245, 158, 11, 0.1)';
+      slotElement.style.boxSizing = 'border-box';
+      slotElement.style.cursor = 'move';
+      
+      // Add slot label
+      const slotLabel = document.createElement('div');
+      slotLabel.style.position = 'absolute';
+      slotLabel.style.top = '2px';
+      slotLabel.style.left = '2px';
+      slotLabel.style.background = '#f59e0b';
+      slotLabel.style.color = 'white';
+      slotLabel.style.padding = '1px 4px';
+      slotLabel.style.borderRadius = '2px';
+      slotLabel.style.fontSize = '10px';
+      slotLabel.style.fontWeight = 'bold';
+      slotLabel.textContent = 'S' + slot.id;
+      slotElement.appendChild(slotLabel);
+      
+      // Add slot drag functionality
+      slotElement.addEventListener('mousedown', (e) => {
+        e.stopPropagation();
+        startDrag(e, slotElement, 'slot', slot.id);
+      });
+      
+      areaElement.appendChild(slotElement);
+    });
+  }
   
   // Add coordinates display
   const coords = document.createElement('div');
@@ -4371,7 +4632,7 @@ const finalFormData = {
   areaElement.addEventListener('mousedown', (e) => startDrag(e, areaElement));
   
   canvas.appendChild(areaElement);
-  console.log('Created brand area at', brandAreaSettings.x, brandAreaSettings.y);
+  console.log('Created brand area with', slotsCount, 'slots at', brandAreaSettings.x, brandAreaSettings.y);
 }
 
 function updateBrandArea(brandAreaSettings) {
@@ -4396,54 +4657,83 @@ function updateBrandArea(brandAreaSettings) {
       }
     }
     
-    function startDrag(e, element) {
-      isDragging = true;
-      currentElement = element;
-      const rect = element.getBoundingClientRect();
-      dragOffset.x = e.clientX - rect.left;
-      dragOffset.y = e.clientY - rect.top;
-      
-      element.style.zIndex = '1000';
-      element.style.transform = 'scale(1.05)';
-      document.addEventListener('mousemove', onDrag);
-      document.addEventListener('mouseup', stopDrag);
-      e.preventDefault();
-      
-      setSyncStatus('🤏 Dragging', '#f59e0b');
-    }
+    function startDrag(e, element, type = 'normal', slotId = null) {
+  isDragging = true;
+  currentElement = element;
+  dragType = type;
+  currentSlotId = slotId;
+  
+  const rect = element.getBoundingClientRect();
+  dragOffset.x = e.clientX - rect.left;
+  dragOffset.y = e.clientY - rect.top;
+  
+  element.style.zIndex = '1000';
+  element.style.transform = 'scale(1.05)';
+  document.addEventListener('mousemove', onDrag);
+  document.addEventListener('mouseup', stopDrag);
+  e.preventDefault();
+  
+  setSyncStatus('🤏 Dragging', '#f59e0b');
+}
 
     function onDrag(e) {
-      if (!isDragging || !currentElement) return;
+  if (!isDragging || !currentElement) return;
+  
+  const canvasRect = document.getElementById('canvas').getBoundingClientRect();
+  let x, y;
+  
+  if (dragType === 'slot') {
+    // For brand slots, constrain within parent brand area
+    const parentArea = currentElement.closest('.brand-area');
+    if (parentArea) {
+      const parentRect = parentArea.getBoundingClientRect();
+      const relativeX = e.clientX - parentRect.left - dragOffset.x;
+      const relativeY = e.clientY - parentRect.top - dragOffset.y;
       
-      const canvasRect = document.getElementById('canvas').getBoundingClientRect();
-      const x = Math.max(PADDING, Math.min(e.clientX - canvasRect.left - dragOffset.x, CANVAS_WIDTH - 100));
-      const y = Math.max(PADDING, Math.min(e.clientY - canvasRect.top - dragOffset.y, CANVAS_HEIGHT - 50));
+      const slotWidth = parseInt(currentElement.style.width);
+      const slotHeight = parseInt(currentElement.style.height);
+      const parentWidth = parseInt(parentArea.style.width);
+      const parentHeight = parseInt(parentArea.style.height);
       
-      currentElement.style.left = x + 'px';
-      currentElement.style.top = y + 'px';
-      
-      const coords = currentElement.querySelector('.coords');
-      if (coords) {
-        updateCoords(coords, x, y);
-      }
-
-      // Update parent window in real-time
-      if (window.opener && !window.opener.closed) {
-        try {
-          const fieldName = currentElement.dataset.field;
-          if (fieldName === 'doctorImage') {
-  window.opener.updateImagePositionFromPreview(x, y);
-} else if (fieldName === 'brandArea') {
-  window.opener.updateBrandAreaPositionFromPreview(x, y);
-} else {
-  window.opener.updatePositionFromPreview(fieldName, x, y);
-}
-        } catch (error) {
-          console.warn('Failed to update parent:', error);
-        }
-      }
-      setSyncStatus('🔄 Moved', '#2563eb');
+      // Constrain slot within parent bounds
+      x = Math.max(0, Math.min(relativeX, parentWidth - slotWidth));
+      y = Math.max(0, Math.min(relativeY, parentHeight - slotHeight));
+    } else {
+      return; // No parent area found
     }
+  } else {
+    // Normal drag behavior for other elements
+    x = Math.max(PADDING, Math.min(e.clientX - canvasRect.left - dragOffset.x, CANVAS_WIDTH - 100));
+    y = Math.max(PADDING, Math.min(e.clientY - canvasRect.top - dragOffset.y, CANVAS_HEIGHT - 50));
+  }
+  
+  currentElement.style.left = x + 'px';
+  currentElement.style.top = y + 'px';
+  
+  const coords = currentElement.querySelector('.coords');
+  if (coords) {
+    updateCoords(coords, x, y);
+  }
+
+  // Update parent window in real-time
+  if (window.opener && !window.opener.closed) {
+    try {
+      const fieldName = currentElement.dataset.field;
+      if (fieldName === 'doctorImage') {
+        window.opener.updateImagePositionFromPreview(x, y);
+      } else if (fieldName === 'brandArea') {
+        window.opener.updateBrandAreaPositionFromPreview(x, y);
+      } else if (dragType === 'slot') {
+        window.opener.updateSlotPositionFromPreview(currentSlotId, x, y);
+      } else {
+        window.opener.updatePositionFromPreview(fieldName, x, y);
+      }
+    } catch (error) {
+      console.warn('Failed to update parent:', error);
+    }
+  }
+  setSyncStatus('🔄 Moved', '#2563eb');
+}
 
     function stopDrag() {
       if (currentElement) {
