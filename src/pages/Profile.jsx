@@ -9,6 +9,7 @@ import {
   generateImageContent,
   getImageTemplates,
   getTemplatesDetailsById,
+  getAllBrands, // ADD THIS
 } from "../api";
 import logo from "../assets/ixoralogo.png";
 import profile from "../assets/blank.jpg";
@@ -385,6 +386,7 @@ if (response && response.id) {
           console.log("🔍 Template Details Fetched:", templateDetails);
           console.log("🔍 Custom Text from Template:", templateDetails.custom_text);
           console.log("🔍 Text Positions:", templateDetails.text_positions);
+          console.log("🔍 Template Brand Area Settings:", templateDetails.brand_area_settings); // ADD 
           toast.dismiss("template-fetch");
 
           // Use template's custom_text and positioning
@@ -393,15 +395,16 @@ const imageData = {
   template_id: formData.template,
   mobile: formData.mobileNumber,
   name: formData.doctorName,
+  selected_brands: selectedBrands, // ADD THIS
   content_data: {
     message: templateDetails.custom_text || "",
     custom_text: templateDetails.custom_text || "",
-    // Pass all doctor data for dynamic text replacement
     doctor_name: formData.doctorName,
     doctor_specialization: formData.specialization,
     doctor_clinic: formData.hospital,
     doctor_city: formData.city,
-    doctor_state: formData.state
+    doctor_state: formData.state,
+    selected_brands: selectedBrands // ADD THIS TOO
   },
   doctor_data: {
     name: formData.doctorName,
@@ -468,6 +471,10 @@ console.log("🔍 ================================");
   const [isSearchingDoctor, setIsSearchingDoctor] = useState(false);
   const [doctorFoundMessage, setDoctorFoundMessage] = useState("");
 
+  // ADD THESE LINES:
+const [brandCategories, setBrandCategories] = useState([]);
+const [selectedBrands, setSelectedBrands] = useState([]);
+
   const fetchTemplatesList = async () => {
     try {
       // Fetch both video and image templates
@@ -511,25 +518,48 @@ console.log("🔍 ================================");
     }
   };
 
-  useEffect(() => {
-    const initializeData = async () => {
-      try {
-        setIsLoading(true);
-        await Promise.allSettled([
-          fetchTemplates(),
-          fetchTemplatesList(),
-          checkImageTemplates() // Add this line
-        ]);
-      } catch (error) {
-        console.error("Error initializing data:", error);
-        toast.error("Failed to load templates");
-      } finally {
-        setIsLoading(false);
-      }
-    };
+  const fetchBrandCategories = async () => {
+  try {
+    const response = await getAllBrands();
+    setBrandCategories(response.categories || []);
+  } catch (error) {
+    console.error("Error fetching brands:", error);
+    toast.error("Failed to load brands");
+  }
+};
 
-    initializeData();
-  }, []);
+const handleBrandSelection = (brandId, isSelected) => {
+  if (isSelected) {
+    if (selectedBrands.length < 10) {
+      setSelectedBrands(prev => [...prev, brandId]);
+    } else {
+      toast.error("You can select maximum 10 brands");
+    }
+  } else {
+    setSelectedBrands(prev => prev.filter(id => id !== brandId));
+  }
+};
+
+useEffect(() => {
+  const initializeData = async () => {
+    try {
+      setIsLoading(true);
+      await Promise.allSettled([
+        fetchTemplates(),
+        fetchTemplatesList(),
+        checkImageTemplates(),
+        fetchBrandCategories() // ADD THIS LINE
+      ]);
+    } catch (error) {
+      console.error("Error initializing data:", error);
+      toast.error("Failed to load templates");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  initializeData();
+}, []);
 
   if (isLoading) {
     return (
@@ -705,6 +735,7 @@ console.log("🔍 ================================");
                       onChange={(e) => {
                         setSelectedTemplateType(e.target.value);
                         setFormData(prev => ({ ...prev, template: "" }));
+                        setSelectedBrands([]); // ADD THIS LINE
                       }}
                       className="mr-3 h-4 w-4 text-blue-600"
                     />
@@ -719,6 +750,7 @@ console.log("🔍 ================================");
                       onChange={(e) => {
                         setSelectedTemplateType(e.target.value);
                         setFormData(prev => ({ ...prev, template: "" }));
+                        setSelectedBrands([]); // ADD THIS LINE
                       }}
                       className="mr-3 h-4 w-4 text-blue-600"
                     />
@@ -756,32 +788,84 @@ console.log("🔍 ================================");
                 </select>
 
                 {/* ADD TEMPLATE PREVIEW FOR IMAGE TEMPLATES */}
-                {selectedTemplateType === "image" && formData.template && (
-                  <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded-md">
-                    <div className="text-sm font-medium text-blue-700 mb-2">Template Preview:</div>
-                    {(() => {
-                      const templatePositions = getTemplatePositionsPreview(formData.template);
-                      const selectedTemplate = templateList.find(t => t.id === parseInt(formData.template));
+                {/* ADD TEMPLATE PREVIEW FOR IMAGE TEMPLATES */}
+{selectedTemplateType === "image" && formData.template && (
+  <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded-md">
+    <div className="text-sm font-medium text-blue-700 mb-2">Template Preview:</div>
+    {(() => {
+      const templatePositions = getTemplatePositionsPreview(formData.template);
+      const selectedTemplate = templateList.find(t => t.id === parseInt(formData.template));
 
-                      if (!templatePositions) {
-                        return <div className="text-red-500 text-xs">No positioning data available</div>;
-                      }
+      if (!templatePositions) {
+        return <div className="text-red-500 text-xs">No positioning data available</div>;
+      }
 
-                      return (
-                        <div className="space-y-1 text-xs">
-                          <div>Custom Text: "{selectedTemplate?.custom_text || 'Not set'}"</div>
-                          <div>Positions configured for: {Object.keys(templatePositions).join(", ")}</div>
-                          <div className="text-green-600">✅ This template will use your Gallery positioning</div>
-                        </div>
-                      );
-                    })()}
-                  </div>
-                )}
+      const brandSettings = selectedTemplate?.brand_area_settings;
+
+      return (
+        <div className="space-y-1 text-xs">
+          <div>Custom Text: "{selectedTemplate?.custom_text || 'Not set'}"</div>
+          <div>Positions configured for: {Object.keys(templatePositions).join(", ")}</div>
+          {brandSettings && brandSettings.enabled && (
+            <div className="text-purple-600">
+              🎨 Brand logos will be: {brandSettings.brandWidth || 100} × {brandSettings.brandHeight || 60} pixels
+            </div>
+          )}
+          <div className="text-green-600">✅ This template will use your Gallery positioning</div>
+        </div>
+      );
+    })()}
+  </div>
+)}
                 {errors.template && (
                   <p className="text-red-500 text-sm">{errors.template}</p>
                 )}
               </div>
             </div>
+
+              {/* Brand Selection by Category - Only for Image Templates */}
+            {selectedTemplateType === "image" && formData.template && (
+              <div className="col-span-2 mb-4">
+                <label className="block font-bold text-xl mb-3">
+                  Select Brands (Optional)
+                </label>
+                <div className="space-y-4">
+                  {brandCategories.map((category) => (
+                    <div key={category.category_key} className="border border-gray-200 rounded-lg p-4">
+                      <h4 className="font-semibold text-lg mb-3 text-green-700">
+                        {category.category_name}
+                      </h4>
+                      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+                        {category.brands.map((brand) => (
+                          <label key={brand.id} className="flex items-center space-x-2 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={selectedBrands.includes(brand.id)}
+                              onChange={(e) => handleBrandSelection(brand.id, e.target.checked)}
+                              className="form-checkbox h-4 w-4 text-blue-600"
+                            />
+                            <img
+                              src={brand.brand_image}
+                              alt={brand.name}
+                              className="w-8 h-8 object-contain"
+                            />
+                            <span className="text-sm">{brand.name}</span>
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                {selectedBrands.length > 0 && (
+                  <div className="mt-3 p-2 bg-green-50 border border-green-200 rounded">
+                    <span className="text-green-700 font-medium">
+                      Selected: {selectedBrands.length} brand(s)
+                    </span>
+                  </div>
+                )}
+              </div>
+            )}
+
 
             {/* State */}
             <div className="flex gap-3">
