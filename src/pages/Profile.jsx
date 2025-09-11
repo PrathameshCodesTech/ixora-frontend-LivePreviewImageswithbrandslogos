@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from "react";
 import axios from "axios";
+import FEATURE_FLAGS from "../config/features";
 import {
   doctorVideoGeneration,
   getAllEmployees,
@@ -467,7 +468,9 @@ console.log("🔍 ================================");
   };
   const [templateList, setTemplatesList] = useState([]);
 
-  const [selectedTemplateType, setSelectedTemplateType] = useState("video");
+  const [selectedTemplateType, setSelectedTemplateType] = useState(
+  FEATURE_FLAGS.ENABLE_VIDEO_FEATURES ? "video" : "image"
+);
   const [isSearchingDoctor, setIsSearchingDoctor] = useState(false);
   const [doctorFoundMessage, setDoctorFoundMessage] = useState("");
 
@@ -721,64 +724,73 @@ useEffect(() => {
                 )}
               </div>
               {/* Template Type Selection */}
-              <div className="col-span-2 mb-4">
-                <label className="block font-bold text-xl mb-3">
-                  Content Type
-                </label>
-                <div className="flex items-center space-x-6">
-                  <label className="flex items-center cursor-pointer">
-                    <input
-                      type="radio"
-                      name="templateType"
-                      value="video"
-                      checked={selectedTemplateType === "video"}
-                      onChange={(e) => {
-                        setSelectedTemplateType(e.target.value);
-                        setFormData(prev => ({ ...prev, template: "" }));
-                        setSelectedBrands([]); // ADD THIS LINE
-                      }}
-                      className="mr-3 h-4 w-4 text-blue-600"
-                    />
-                    <span className="text-lg font-medium">📹 Video Template</span>
-                  </label>
-                  <label className="flex items-center cursor-pointer">
-                    <input
-                      type="radio"
-                      name="templateType"
-                      value="image"
-                      checked={selectedTemplateType === "image"}
-                      onChange={(e) => {
-                        setSelectedTemplateType(e.target.value);
-                        setFormData(prev => ({ ...prev, template: "" }));
-                        setSelectedBrands([]); // ADD THIS LINE
-                      }}
-                      className="mr-3 h-4 w-4 text-blue-600"
-                    />
-                    <span className="text-lg font-medium">🖼️ Image Template</span>
-                  </label>
-                </div>
-              </div>
+              {FEATURE_FLAGS.ENABLE_VIDEO_FEATURES ? (
+  <div className="col-span-2 mb-4">
+    <label className="block font-bold text-xl mb-3">
+      Content Type
+    </label>
+    <div className="flex items-center space-x-6">
+      <label className="flex items-center cursor-pointer">
+        <input
+          type="radio"
+          name="templateType"
+          value="video"
+          checked={selectedTemplateType === "video"}
+          onChange={(e) => {
+            setSelectedTemplateType(e.target.value);
+            setFormData(prev => ({ ...prev, template: "" }));
+            setSelectedBrands([]);
+          }}
+          className="mr-3 h-4 w-4 text-blue-600"
+        />
+        <span className="text-lg font-medium">📹 Video Template</span>
+      </label>
+      <label className="flex items-center cursor-pointer">
+        <input
+          type="radio"
+          name="templateType"
+          value="image"
+          checked={selectedTemplateType === "image"}
+          onChange={(e) => {
+            setSelectedTemplateType(e.target.value);
+            setFormData(prev => ({ ...prev, template: "" }));
+            setSelectedBrands([]);
+          }}
+          className="mr-3 h-4 w-4 text-blue-600"
+        />
+        <span className="text-lg font-medium">🖼️ Image Template</span>
+      </label>
+    </div>
+  </div>
+) : (
+  <input type="hidden" name="templateType" value="image" />
+)}
 
               <div>
-                <label className="block font-bold text-xl mb-2">
-                  Choose {selectedTemplateType === "video" ? "Video" : "Image"} Template
-                </label>
-                <select
-                  value={formData.template}
-                  onChange={(e) => {
-                    handleInputChange(e);
-                    // When template changes, show preview for image templates
-                    if (selectedTemplateType === "image" && e.target.value) {
-                      const templatePositions = getTemplatePositionsPreview(e.target.value);
-                      console.log("Selected template positions:", templatePositions);
-                    }
-                  }}
-                  name="template"
-                  className={`w-full border ${errors.template ? "border-red-500" : "border-gray-300"
-                    } rounded-md px-4 py-2 mb-1`}
-                >
-                  <option value="">Select {selectedTemplateType === "video" ? "Video" : "Image"} Template</option>
-                  {templateList
+  <label className="block font-bold text-xl mb-2">
+    Choose {FEATURE_FLAGS.ENABLE_VIDEO_FEATURES ? 
+      (selectedTemplateType === "video" ? "Video" : "Image") : 
+      ""} Template
+  </label>
+  <select
+    value={formData.template}
+    onChange={(e) => {
+      handleInputChange(e);
+      // When template changes, show preview for image templates
+      if (selectedTemplateType === "image" && e.target.value) {
+        const templatePositions = getTemplatePositionsPreview(e.target.value);
+        console.log("Selected template positions:", templatePositions);
+      }
+    }}
+    name="template"
+    className={`w-full border ${errors.template ? "border-red-500" : "border-gray-300"
+      } rounded-md px-4 py-2 mb-1`}
+  >
+    <option value="">
+      Select {FEATURE_FLAGS.ENABLE_VIDEO_FEATURES ? 
+        (selectedTemplateType === "video" ? "Video" : "Image") : 
+        ""} Template
+    </option>                  {templateList
                     .filter(template => template.template_type === selectedTemplateType)
                     .map((list) => (
                       <option value={list.id} key={list.id}>

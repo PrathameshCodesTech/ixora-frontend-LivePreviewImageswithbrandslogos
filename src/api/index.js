@@ -46,15 +46,15 @@ export const employeeCreation = async (data) => {
   }
 };
 
-export const getAllDoctors = async (page = 1) => {
-  try {
-    const response = await axios.get(`${BASE_URL}/api/doctors/?page=${page}`);
-    return response.data;
-  } catch (error) {
-    console.log("Error In Getting All Doctors Record", error);
-    throw error;
-  }
+export const getAllDoctors = async (page = 1, search = '', specialization = '') => {
+  const params = new URLSearchParams({ page: page.toString() });
+  if (search) params.append('search', search);
+  if (specialization) params.append('specialization', specialization);
+  
+  const response = await axios.get(`${BASE_URL}/api/doctors/?${params}`);
+  return response.data;
 };
+
 export const getFilteredVideoTemplates = async (status) => {
   try {
     const response = await axios.get(
@@ -66,9 +66,9 @@ export const getFilteredVideoTemplates = async (status) => {
     throw error;
   }
 };
-export const getTemplateCount = async () => {
+export const getTemplateCount = async (templateType = 'video') => {
   try {
-    const response = await axios.get(`${BASE_URL}/video/template-count/`);
+    const response = await axios.get(`${BASE_URL}/video/template-count/?template_type=${templateType}`);
     return response.data;
   } catch (error) {
     console.log("Error In Getting templates count", error);
@@ -115,19 +115,16 @@ export const createBulkEmployee = async (FormData) => {
   }
 };
 
-export const getAllDoctorsVideosByEmployee = async (empId, page = 1) => {
-  try {
-    const response = await axios.get(
-      `${BASE_URL}/api/by-employee/doctors-video/?employee_id=${empId}&page=${page}`
-    );
-    return response.data;
-  } catch (error) {
-    console.log(
-      "Error getting the doctors details for the specific user",
-      error
-    );
-    throw error;
-  }
+export const getAllDoctorsVideosByEmployee = async (empId, page = 1, search = '', specialization = '') => {
+  const params = new URLSearchParams({ 
+    page: page.toString(),
+    employee_id: empId 
+  });
+  if (search) params.append('search', search);
+  if (specialization) params.append('specialization', specialization);
+  
+  const response = await axios.get(`${BASE_URL}/api/doctors-by-employee/?${params}`);
+  return response.data;
 };
 export const CreateEmployee = async (data) => {
   try {
@@ -574,6 +571,16 @@ export const postBrandPosition = async (templateId, brandId, position) => {
     return response.data;
   } catch (error) {
     console.error('Brand position save error:', error);
+    throw error;
+  }
+};
+
+export const getImageTemplateUsage = async () => {
+  try {
+    const response = await axios.get(`${BASE_URL}/api/image-template-usage/`);
+    return response.data;
+  } catch (error) {
+    console.log("Error getting image template usage", error);
     throw error;
   }
 };

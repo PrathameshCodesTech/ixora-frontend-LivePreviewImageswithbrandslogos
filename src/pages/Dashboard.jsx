@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from "react";
 import { BarChart, Bar, XAxis, Tooltip, ResponsiveContainer } from "recharts";
 import { UserIcon, VideoIcon } from "lucide-react";
+import { FaImage } from "react-icons/fa";
+import FEATURE_FLAGS from "../config/features";
 import { motion } from "framer-motion";
 import { useCountUp } from "react-countup";
 import logo from "../assets/ixoralogo.png";
@@ -22,6 +24,8 @@ import {
   eachDayOfInterval,
   isWithinInterval,
 } from "date-fns";
+import { getImageTemplateUsage } from "../api";
+
 
 // Animation variants
 const containerVariants = {
@@ -83,14 +87,31 @@ class ErrorBoundary extends React.Component {
 // Robust Animated Counter with Error Boundary
 const AnimatedCounter = ({ end }) => {
   const numericValue = Number(end) || 0;
-  const { countUp } = useCountUp({
-    end: numericValue,
-    duration: 2,
-    delay: 0.5,
-    startOnMount: true,
-  });
+  
+  // Simple counter without the problematic react-countup library
+  const [count, setCount] = useState(0);
+  
+  useEffect(() => {
+    const duration = 2000; // 2 seconds
+    const steps = 60; // 60 steps for smooth animation
+    const increment = numericValue / steps;
+    const stepTime = duration / steps;
+    
+    let currentStep = 0;
+    const timer = setInterval(() => {
+      currentStep++;
+      if (currentStep >= steps) {
+        setCount(numericValue);
+        clearInterval(timer);
+      } else {
+        setCount(Math.floor(increment * currentStep));
+      }
+    }, stepTime);
+    
+    return () => clearInterval(timer);
+  }, [numericValue]);
 
-  return <span>{countUp}</span>;
+  return <span>{count}</span>;
 };
 
 const Dashboard = () => {
@@ -99,6 +120,12 @@ const Dashboard = () => {
   const [videoCreatedCount, setVideoCreatedCount] = useState(0);
   const [activeEmployeesCount, setActiveEmployeesCount] = useState(0);
   const [totalActive, setTotalActive] = useState([]);
+
+  const [imageTemplateUsage, setImageTemplateUsage] = useState([]);
+  const [showDoctorModal, setShowDoctorModal] = useState(false);
+  const [selectedTemplateDoctors, setSelectedTemplateDoctors] = useState([]);
+  const [selectedTemplateName, setSelectedTemplateName] = useState("");
+
   const [showDateRangePicker, setShowDateRangePicker] = useState(false);
   const [dateRange, setDateRange] = useState([
     {
@@ -132,36 +159,190 @@ const Dashboard = () => {
 
   const [employees, setEmployee] = useState([]);
 
-  const showCountofemployee = async () => {
-    try {
-      const response = await getAllEmployees();
-      const employeeCount = response.length;
-      setCount(employeeCount);
+const showCountofemployee = async () => {
+  try {
+    const response = await getAllEmployees();
+    const employeeCount = response.length;
+    setCount(employeeCount);
 
-      const doctorresponse = await getAllDoctors();
-      setDoctorCount(doctorresponse.length);
-      const createdVideos = doctorresponse.filter(
-        (doc) => doc.output_video !== null
-      );
-      setVideoCreatedCount(createdVideos.length);
-    } catch (error) {
-      console.log("Error in getting employee details", error);
-    }
-  };
+    const doctorresponse = await getAllDoctors();
+    console.log("Doctor response:", doctorresponse);
+    
+    // Handle paginated response structure
+    const doctorCount = doctorresponse.count || doctorresponse.length || 0;
+    const doctorList = doctorresponse.results || doctorresponse || [];
+    
+    console.log("Doctor count:", doctorCount);
+    setDoctorCount(doctorCount);
+    
+    // Count both videos and images based on feature flags
+// Count both videos and images based on feature flags
+if (FEATURE_FLAGS.ENABLE_VIDEO_FEATURES) {
+  const createdVideos = doctorList.filter(
+    (doc) => doc.output_video !== null
+  );
+  setVideoCreatedCount(createdVideos.length);
+}
+// Note: For images, we'll count from template usage data instead
+// This will be handled in a separate useEffect after imageTemplateUsage is loaded
+  } catch (error) {
+    console.log("Error in getting employee details", error);
+  }
+};
 
-  const fetchTemplateCount = async () => {
-    try {
-      const res = await getTemplateCount();
+
+const fetchTemplateCount = async () => {
+  try {
+    if (FEATURE_FLAGS.ENABLE_VIDEO_FEATURES) {
+      const res = await getTemplateCount('video');
       setEmployee(res);
-    } catch (error) {
-      console.log(error);
+    } else {
+      // ADD DEBUGGING HERE:
+      console.log("🔍 Fetching image template usage...");
+      const res = await getImageTemplateUsage();
+      console.log("🔍 Image template usage response:", res);
+      console.log("🔍 Response length:", res?.length);
+      setImageTemplateUsage(res);
     }
-  };
+  } catch (error) {
+    console.log("❌ Error in fetchTemplateCount:", error);
+  }
+};
 
   useEffect(() => {
     showCountofemployee();
     fetchTemplateCount();
   }, []);
+
+
+
+
+{/* Template Wise Count Table */}
+<motion.div className="space-y-4 mt-10" variants={itemVariants}>
+  <div className="flex justify-between items-center my-5">
+    <h4 className="text-xl font-bold">
+      {FEATURE_FLAGS.ENABLE_VIDEO_FEATURES ? "Template Wise Count" : "Image Template Usage"}
+    </h4>
+  </div>
+  
+  <motion.table
+    className="w-full text-sm text-left border rounded-md overflow-hidden"
+    initial={{ opacity: 0 }}
+    animate={{ opacity: 1 }}
+    transition={{ delay: 0.4 }}
+  >
+    <thead className="bg-gray-100">
+      <tr className="text-gray-500">
+        <th className="p-2">Template Name</th>
+        <th className="p-2">
+          {FEATURE_FLAGS.ENABLE_VIDEO_FEATURES ? "No. of Videos" : "No. of Images"}
+        </th>
+        {!FEATURE_FLAGS.ENABLE_VIDEO_FEATURES && (
+          <>
+            <th className="p-2">Doctors</th>
+            <th className="p-2">Actions</th>
+          </>
+        )}
+      </tr>
+    </thead>
+    <tbody>
+      {FEATURE_FLAGS.ENABLE_VIDEO_FEATURES ? (
+        employees.map((emp, idx) => (
+          <motion.tr
+            key={idx}
+            custom={idx}
+            initial="hidden"
+            animate="visible"
+            variants={tableRowVariants}
+            className="border-t-2 border-gray-200 text-lg font-semibold"
+            whileHover={{ backgroundColor: "#f8fafc" }}
+          >
+            <td className="p-2">{emp.template_name}</td>
+            <td className="p-2">{emp.video_count}</td>
+          </motion.tr>
+        ))
+      ) : (
+        imageTemplateUsage.map((template, idx) => (
+          <motion.tr
+            key={idx}
+            custom={idx}
+            initial="hidden"
+            animate="visible"
+            variants={tableRowVariants}
+            className="border-t-2 border-gray-200 text-lg font-semibold"
+            whileHover={{ backgroundColor: "#f8fafc" }}
+          >
+            <td className="p-2">{template.template_name}</td>
+            <td className="p-2">{template.usage_count}</td>
+            <td className="p-2">
+              <button
+                onClick={() => {
+                  setSelectedTemplateDoctors(template.doctor_names);
+                  setSelectedTemplateName(template.template_name);
+                  setShowDoctorModal(true);
+                }}
+                className="text-blue-600 hover:text-blue-800 underline"
+              >
+                View Doctors ({template.doctor_names.length})
+              </button>
+            </td>
+            <td className="p-2">
+              <button
+                onClick={() => downloadDoctorList(template.doctor_names, template.template_name)}
+                className="px-3 py-1 bg-green-600 text-white rounded hover:bg-green-700"
+              >
+                Download
+              </button>
+            </td>
+          </motion.tr>
+        ))
+      )}
+    </tbody>
+  </motion.table>
+</motion.div>
+
+{/* Doctor Names Modal */}
+{showDoctorModal && (
+  <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+    <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4 max-h-96 overflow-y-auto">
+      <div className="flex justify-between items-center mb-4">
+        <h3 className="text-lg font-bold">
+          Doctors using "{selectedTemplateName}"
+        </h3>
+        <button
+          onClick={() => setShowDoctorModal(false)}
+          className="text-gray-500 hover:text-gray-700 text-xl"
+        >
+          ×
+        </button>
+      </div>
+      <div className="space-y-2">
+        {selectedTemplateDoctors.map((doctorName, index) => (
+          <div key={index} className="p-2 bg-gray-50 rounded">
+            {doctorName}
+          </div>
+        ))}
+      </div>
+      <div className="mt-4 flex justify-end">
+        <button
+          onClick={() => {
+            downloadDoctorList(selectedTemplateDoctors, selectedTemplateName);
+            setShowDoctorModal(false);
+          }}
+          className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+        >
+          Download List
+        </button>
+      </div>
+    </div>
+  </div>
+)}
+
+  useEffect(() => {
+    showCountofemployee();
+    fetchTemplateCount();
+  }, []);
+
 
   const ActiveLogin = async () => {
     try {
@@ -180,6 +361,16 @@ const Dashboard = () => {
   useEffect(() => {
     ActiveLogin();
   }, []);
+
+  useEffect(() => {
+  if (!FEATURE_FLAGS.ENABLE_VIDEO_FEATURES && imageTemplateUsage.length > 0) {
+    const totalImagesFromTemplates = imageTemplateUsage.reduce((total, template) => {
+      return total + template.usage_count;
+    }, 0);
+    setVideoCreatedCount(totalImagesFromTemplates);
+  }
+}, [imageTemplateUsage]);
+
 
   const downloadEmployeeDetailse = async () => {
     try {
@@ -250,6 +441,20 @@ const Dashboard = () => {
     }
   };
 
+  const downloadDoctorList = (doctorNames, templateName) => {
+  const csvContent = "Doctor Name\n" + doctorNames.join("\n");
+  const blob = new Blob([csvContent], { type: 'text/csv' });
+  const url = window.URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `${templateName}_doctors.csv`;
+  document.body.appendChild(link);
+  link.click();
+  window.URL.revokeObjectURL(url);
+  document.body.removeChild(link);
+  toast.success("Doctor list downloaded!");
+};
+
   return (
     <motion.div
       initial="hidden"
@@ -290,16 +495,17 @@ const Dashboard = () => {
             value: activeEmployeesCount,
           },
           {
-            icon: <VideoIcon className="text-[#0A0A64] font-extrabold" />,
-            label: "Videos Created",
+            icon: <FaImage className="text-[#0A0A64] font-extrabold" />,
+            label: FEATURE_FLAGS.ENABLE_VIDEO_FEATURES ? "Videos Created" : "Images Created",
             value: videoCreatedCount,
             onclick: fetchDownloadDoctorData,
           },
           {
-            icon: <UserIcon className="text-[#0A0A64] font-extrabold" />,
-            label: "Doctors Empaneled",
-            value: doctorCount,
-          },
+  icon: <UserIcon className="text-[#0A0A64] font-extrabold" />,
+  label: "Doctors Empaneled",
+  value: doctorCount,
+  onclick: fetchDownloadDoctorData,
+},
         ].map((item, index) => (
           <motion.div
             key={index}
@@ -326,7 +532,7 @@ const Dashboard = () => {
               className="px-4 py-2 bg-[#0A0A64] text-white text-md w-full font-bold rounded-md transition"
               whileHover={{ scale: 1.02 }}
               whileTap={{ scale: 0.98 }}
-              onClick={item.onclick || (() => {})}
+              onClick={item.onclick || (() => { })}
             >
               Download
             </motion.button>
@@ -336,42 +542,125 @@ const Dashboard = () => {
 
 
       {/* Representative Wise Count */}
-      <motion.div className="space-y-4 mt-10" variants={itemVariants}>
-        <div className="flex justify-between items-center my-5">
-          <h4 className="text-xl font-bold">Template Wise Count</h4>
-
-        </div>
-        <motion.table
-          className="w-full text-sm text-left border rounded-md overflow-hidden"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 0.4 }}
-        >
-          <thead className="bg-gray-100">
-            <tr className="text-gray-500">
-              <th className="p-2">Template</th>
-              <th className="p-2">No. of videos</th>
-            </tr>
-          </thead>
-          <tbody>
-            {employees.map((emp, idx) => (
-              <motion.tr
-                key={idx}
-                custom={idx}
-                initial="hidden"
-                animate="visible"
-                variants={tableRowVariants}
-                className="border-t-2 border-gray-200 text-lg font-semibold"
-                whileHover={{ backgroundColor: "#f8fafc" }}
+<motion.div className="space-y-4 mt-10" variants={itemVariants}>
+  <div className="flex justify-between items-center my-5">
+    <h4 className="text-xl font-bold">
+      {FEATURE_FLAGS.ENABLE_VIDEO_FEATURES ? "Template Wise Count" : "Image Template Usage"}
+    </h4>
+  </div>
+  
+  <motion.table
+    className="w-full text-sm text-left border rounded-md overflow-hidden"
+    initial={{ opacity: 0 }}
+    animate={{ opacity: 1 }}
+    transition={{ delay: 0.4 }}
+  >
+    <thead className="bg-gray-100">
+      <tr className="text-gray-500">
+        <th className="p-2">Template Name</th>
+        <th className="p-2">
+          {FEATURE_FLAGS.ENABLE_VIDEO_FEATURES ? "No. of Videos" : "No. of Images"}
+        </th>
+        {!FEATURE_FLAGS.ENABLE_VIDEO_FEATURES && (
+          <>
+            <th className="p-2">Doctors</th>
+            <th className="p-2">Actions</th>
+          </>
+        )}
+      </tr>
+    </thead>
+    <tbody>
+      {FEATURE_FLAGS.ENABLE_VIDEO_FEATURES ? (
+        employees.map((emp, idx) => (
+          <motion.tr
+            key={idx}
+            custom={idx}
+            initial="hidden"
+            animate="visible"
+            variants={tableRowVariants}
+            className="border-t-2 border-gray-200 text-lg font-semibold"
+            whileHover={{ backgroundColor: "#f8fafc" }}
+          >
+            <td className="p-2">{emp.template_name}</td>
+            <td className="p-2">{emp.video_count}</td>
+          </motion.tr>
+        ))
+      ) : (
+        imageTemplateUsage.map((template, idx) => (
+          <motion.tr
+            key={idx}
+            custom={idx}
+            initial="hidden"
+            animate="visible"
+            variants={tableRowVariants}
+            className="border-t-2 border-gray-200 text-lg font-semibold"
+            whileHover={{ backgroundColor: "#f8fafc" }}
+          >
+            <td className="p-2">{template.template_name}</td>
+            <td className="p-2">{template.usage_count}</td>
+            <td className="p-2">
+              <button
+                onClick={() => {
+                  setSelectedTemplateDoctors(template.doctor_names);
+                  setSelectedTemplateName(template.template_name);
+                  setShowDoctorModal(true);
+                }}
+                className="text-blue-600 hover:text-blue-800 underline"
               >
-                <td className="p-2">{emp.template_name}</td>
-                <td className="p-2">{emp.video_count}</td>
-              </motion.tr>
-            ))}
-          </tbody>
-        </motion.table>
-      </motion.div>
+                View Doctors ({template.doctor_names.length})
+              </button>
+            </td>
+            <td className="p-2">
+              <button
+                onClick={() => downloadDoctorList(template.doctor_names, template.template_name)}
+                className="px-3 py-1 bg-green-600 text-white rounded hover:bg-green-700"
+              >
+                Download
+              </button>
+            </td>
+          </motion.tr>
+        ))
+      )}
+    </tbody>
+  </motion.table>
+</motion.div>
 
+{/* Doctor Names Modal */}
+{showDoctorModal && (
+  <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+    <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4 max-h-96 overflow-y-auto">
+      <div className="flex justify-between items-center mb-4">
+        <h3 className="text-lg font-bold">
+          Doctors using "{selectedTemplateName}"
+        </h3>
+        <button
+          onClick={() => setShowDoctorModal(false)}
+          className="text-gray-500 hover:text-gray-700 text-xl"
+        >
+          ×
+        </button>
+      </div>
+      <div className="space-y-2">
+        {selectedTemplateDoctors.map((doctorName, index) => (
+          <div key={index} className="p-2 bg-gray-50 rounded">
+            {doctorName}
+          </div>
+        ))}
+      </div>
+      <div className="mt-4 flex justify-end">
+        <button
+          onClick={() => {
+            downloadDoctorList(selectedTemplateDoctors, selectedTemplateName);
+            setShowDoctorModal(false);
+          }}
+          className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+        >
+          Download List
+        </button>
+      </div>
+    </div>
+  </div>
+)}
 
 
     </motion.div>

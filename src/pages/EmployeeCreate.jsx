@@ -26,7 +26,7 @@ const EmployeeCreate = () => {
         {/* Welcome Message */}
         <div className=" mt-20 ml-15 mb-15">
           <h2 className="text-2xl  text-gray-900 font-bold">
-            Welcome  Empowering Personalized Video
+            Welcome  Empowering Personalized Image Template
           </h2>
           <p className="text-gray-500 font-medium mt-1">
             Start by uploading details or explore your templates
@@ -36,7 +36,7 @@ const EmployeeCreate = () => {
         {/* Tabs */}
         <div className="flex space-x-8 border-b border-gray-300 mb-6 ml-15 mr-11">
           <button onClick={()=>navigate('/create')} className="pb-2  text-gray-500 font-bold">
-            My Videos
+            My Image Template
           </button>
           <button onClick={()=>navigate('/gallery')} className="pb-2 text-gray-500 font-bold cursor-pointer">Templates</button>
           {/* <button onClick={()=>navigate('/analytics')} className="pb-2 text-gray-500 font-bold cursor-pointer">Analytics</button> */}
@@ -54,7 +54,7 @@ const EmployeeCreate = () => {
               </div>
               <h3 className="text-lg  mb-2 mt-2 font-bold">Add Employee Details</h3>
               <p className="text-gray-500 mb-10 font-semibold">
-                Add a details to generate a new video.
+                Add a details to generate a new image.
               </p>
               <div className="flex space-x-4">
                 {/* <button onClick={()=>navigate('/doctors')} className="bg-[#0c0b6b] text-white px-6 py-2 font-bold rounded hover:bg-[#1c1b7b]">

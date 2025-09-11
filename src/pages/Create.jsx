@@ -1,7 +1,7 @@
 import React from 'react'
 import Avatar from '../assets/image.png'
 import logo from '../assets/ixoralogo.png'
-import { FaUpload, FaVideo } from "react-icons/fa";
+import { FaUpload, FaVideo,FaImage } from "react-icons/fa";
 import { useNavigate } from 'react-router-dom';
 import { getItemInLocalStorage } from '../utils/loacalStorage';
 
@@ -42,7 +42,7 @@ const Create = () => {
     <div className="flex space-x-8 border-b border-gray-300 mx-5x md:mx-15 mb-6  wrap-anywhere">
       
       <button className="pb-2 border-b-2 border-black text-black font-bold">
-        My Videos
+        My Images
       </button>
       <button onClick={()=>navigate('/gallery')} className="pb-2 text-gray-500 font-bold cursor-pointer">Templates</button>
       {isAdmin  &&(
@@ -75,7 +75,7 @@ const Create = () => {
           </div>
           <h3 className="text-lg  mb-2 mt-2 font-bold">Add Doctor Details</h3>
           <p className="text-gray-500 mb-10 font-semibold">
-            Add a details to generate a new video.
+            Add a details to generate a new Image Template.
           </p>
           <div className="flex space-x-4">
             {/* <button onClick={()=>navigate('/doctors')} className="bg-[#0c0b6b] text-white px-6 py-2 font-bold rounded hover:bg-[#1c1b7b]">
@@ -93,10 +93,10 @@ const Create = () => {
       <div className="border-1 border-gray-200 rounded-lg p-6 shadow-xl">
         <div className="flex flex-col items-center text-center">
           <div className="bg-blue-100 p-3 rounded-full mb-4">
-            <FaVideo className="text-blue-700 text-xl" />
+            <FaImage className="text-blue-700 text-xl" />
           </div>
-          <h3 className="text-lg  mb-2 mt-2 font-bold">Browse Generated Video</h3>
-          <p className="text-gray-500 mb-10 font-semibold ">Explore generate video</p>
+          <h3 className="text-lg  mb-2 mt-2 font-bold">Browse Generated Image Template</h3>
+          <p className="text-gray-500 mb-10 font-semibold ">Explore or generate images</p>
           <button onClick={()=>navigate('/gallery')} className="bg-[#0c0b6b] text-white px-6 py-2 font-bold rounded hover:bg-[#1c1b7b]">
             View Video
           </button>

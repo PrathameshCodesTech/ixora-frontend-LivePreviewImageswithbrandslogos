@@ -1,0 +1,7 @@
+const FEATURE_FLAGS = {
+  ENABLE_VIDEO_FEATURES: false,
+  ENABLE_LIVE_PREVIEW: true,
+  ENABLE_BRAND_SLOTS: true,
+};
+
+export default FEATURE_FLAGS;

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import Select from "react-select";
 import axios from "axios";
+import FEATURE_FLAGS from "../config/features";
 import {
   getAllDoctors,
   getAllDoctorsVideosByEmployee,
@@ -30,7 +31,7 @@ import {
 } from "../api";
 import logo from "../assets/ixoralogo.png";
 import doctors from "../assets/doctors.png";
-import { FaVideo, FaTable, FaDownload, FaEdit, FaImage } from "react-icons/fa";
+import { FaVideo, FaTable, FaDownload, FaEdit, FaImage, FaTrash } from "react-icons/fa";
 import { useNavigate, useLocation } from "react-router-dom";
 import { FaShare } from "react-icons/fa6";
 import { FaWhatsapp } from "react-icons/fa";
@@ -74,11 +75,9 @@ const Gallery = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [selectedDoctorId, setSelectedDoctorId] = useState(null);
-  const [searchTerm, setSearchTerm] = useState("");
-  // const [doctorsData, setDoctorsData] = useState([]);
-  // const [loading, setLoading] = useState(false);
-  // const [error, setError] = useState(null);
-  const [page, setPage] = useState(1);
+const [searchTerm, setSearchTerm] = useState("");
+const [selectedSpecialization, setSelectedSpecialization] = useState("");
+const [page, setPage] = useState(1);
   const [nextPageUrl, setNextPageUrl] = useState(null);
   const [prevPageUrl, setPrevPageUrl] = useState(null);
   const [count, setCount] = useState("");
@@ -112,7 +111,9 @@ const Gallery = () => {
   const [selectedDoctorForDelete, setSelectedDoctorForDelete] = useState(null);
   const [selectedContentForDelete, setSelectedContentForDelete] =
     useState(null);
-  const [regenerateContentType, setRegenerateContentType] = useState("video");
+  const [regenerateContentType, setRegenerateContentType] = useState(
+    FEATURE_FLAGS.ENABLE_VIDEO_FEATURES ? "video" : "image"
+  );
 
   const debugTokens = () => {
     console.log("🔍 =====FULL TOKEN DEBUG=====");
@@ -145,15 +146,25 @@ const Gallery = () => {
   const itemsPerPage = 10;
   const totalPages = Math.ceil(count / itemsPerPage);
   const fetchDoctorsData = async () => {
-    try {
-      setLoading(true);
-      let response;
+  try {
+    setLoading(true);
+    let response;
 
-      if (USERTYPE === "Admin") {
-        response = await getAllDoctors(page);
-      } else {
-        response = await getAllDoctorsVideosByEmployee(EMPID, page);
-      }
+    // Build query parameters
+    const params = new URLSearchParams();
+    params.append('page', page);
+    if (searchTerm) {
+      params.append('search', searchTerm);
+    }
+    if (selectedSpecialization) {
+      params.append('specialization', selectedSpecialization);
+    }
+
+    if (USERTYPE === "Admin") {
+      response = await getAllDoctors(page, searchTerm, selectedSpecialization);
+    } else {
+      response = await getAllDoctorsVideosByEmployee(EMPID, page, searchTerm, selectedSpecialization);
+    }
 
       // ADD THIS DEBUG FOR IMAGE REGENERATION:
       console.log("🔍 =====IMAGE REGENERATION DEBUG=====");
@@ -168,8 +179,7 @@ const Gallery = () => {
         ) {
           doctor.latest_output_image.forEach((img, imgIndex) => {
             console.log(
-              `🔍 - Image ${imgIndex + 1}: ${
-                img.output_image_url || img.output_image
+              `🔍 - Image ${imgIndex + 1}: ${img.output_image_url || img.output_image
               }`
             );
             console.log(`🔍 - Created at: ${img.created_at}`);
@@ -239,8 +249,12 @@ const Gallery = () => {
   };
 
   useEffect(() => {
-    fetchDoctorsData();
-  }, [USERTYPE, EMPID, page]);
+    const delayedSearch = setTimeout(() => {
+      fetchDoctorsData();
+    }, 500); // Debounce search by 500ms
+
+    return () => clearTimeout(delayedSearch);
+  }, [searchTerm, selectedSpecialization, page, USERTYPE, EMPID]);
 
   const handleNextPage = () => {
     if (nextPageUrl) setPage((prev) => prev + 1);
@@ -298,8 +312,7 @@ const Gallery = () => {
         );
       } else if (contentType === "image") {
         toast.success(
-          `🖼️ Image created successfully for Dr. ${
-            content.doctor_info?.name || content.doctor_name || "Unknown"
+          `🖼️ Image created successfully for Dr. ${content.doctor_info?.name || content.doctor_name || "Unknown"
           }!`
         );
       }
@@ -312,9 +325,8 @@ const Gallery = () => {
       fetchDoctorsData();
     }
   }, [location, navigate]);
-  const [showSpecializationFilter, setShowSpecializationFilter] =
-    useState(false);
-  const [selectedSpecialization, setSelectedSpecialization] = useState("");
+const [showSpecializationFilter, setShowSpecializationFilter] =
+  useState(false);
   const getUniqueSpecializations = () => {
     const specializations = new Set();
     doctorsData.forEach((doctor) => {
@@ -324,22 +336,12 @@ const Gallery = () => {
     });
     return Array.from(specializations).sort();
   };
-  const filteredDoctors = (doctorsData || []).filter((doctor) => {
-    const nameMatch =
-      doctor?.name?.toLowerCase().includes(searchTerm.toLowerCase()) || false;
-    const specializationMatch =
-      selectedSpecialization === "" ||
-      (doctor?.specialization &&
-        doctor.specialization === selectedSpecialization);
+  // Use the paginated data directly from backend, search happens on backend
+  const displayDoctors = doctorsData || [];
 
-    return nameMatch && specializationMatch;
-  });
-
-  const indexOfLastRow = currentPage * rowsPerPage;
-  const indexOfFirstRow = indexOfLastRow - rowsPerPage;
-  const currentRows = filteredDoctors.slice(indexOfFirstRow, indexOfLastRow);
-  // const totalPages = Math.ceil(filteredDoctors.length / rowsPerPage);
-  // const paginate = (pageNumber) => setCurrentPage(pageNumber);
+  // If there's a search term, filter the current page data (you'll need to modify backend to handle search)
+// Use doctorsData directly since backend handles filtering and pagination
+const currentRows = doctorsData || [];
 
   const fetchDownloadDoctorData = async () => {
     try {
@@ -481,12 +483,12 @@ const Gallery = () => {
           prevData.map((doctor) =>
             doctor.id === doctorId
               ? {
-                  ...doctor,
-                  output_video: response.video_file
-                    ? // ? `http://api.videomaker.digielvestech.in${response.video_path}`
-                      `http://127.0.0.1:8000/${response.video_path}`
-                    : null,
-                }
+                ...doctor,
+                output_video: response.video_file
+                  ? // ? `http://api.videomaker.digielvestech.in${response.video_path}`
+                  `http://127.0.0.1:8000/${response.video_path}`
+                  : null,
+              }
               : doctor
           )
         );
@@ -601,9 +603,11 @@ const Gallery = () => {
 
   const [status, setStatus] = useState(false);
 
-  const [templateType, setTemplateType] = useState("video"); // video or image
+  const [templateType, setTemplateType] = useState(
+    FEATURE_FLAGS.ENABLE_VIDEO_FEATURES ? "video" : "image"
+  ); // video or image
   const [imageTemplates, setImageTemplates] = useState([]);
-  const [selectedTemplateType, setSelectedTemplateType] = useState("video");
+  const [selectedTemplateType, setSelectedTemplateType] = useState("image");
   const [imageFormData, setImageFormData] = useState({
     templateName: "",
     templateImage: null,
@@ -635,44 +639,7 @@ const Gallery = () => {
   useEffect(() => {
     fetchActiveTemplatesList();
   }, []);
-  // const fetchFilteredTemplatesList = async (newStatus) => {
-  //   try {
-  //     if (tabs === "all") {
-  //       const res = await getTemplatesDetails();
-  //       setTemplates(res);
-  //     } else {
-  //       const res = await getFilteredVideoTemplates(newStatus);
-  //       setTemplates(res);
-  //     }
-  //   } catch (error) {
-  //     console.log(error);
-  //   }
-  // };
 
-  // const fetchFilteredTemplatesList = async (newStatus) => {
-  //   try {
-  //     if (tabs === "all") {
-  //       if (selectedTemplateType === 'image') {
-  //         const res = await getImageTemplates(); // Use image-specific API
-  //         setTemplates(res);
-  //       } else {
-  //         const res = await getTemplatesDetails();
-  //         const filteredRes = res.filter(template =>
-  //           template.template_type === 'video'
-  //         );
-  //         setTemplates(filteredRes);
-  //       }
-  //     } else {
-  //       const res = await getFilteredVideoTemplates(newStatus);
-  //       const filteredRes = res.filter(template =>
-  //         template.template_type === selectedTemplateType
-  //       );
-  //       setTemplates(filteredRes);
-  //     }
-  //   } catch (error) {
-  //     console.log(error);
-  //   }
-  // };
   const fetchFilteredTemplatesList = async (newStatus) => {
     try {
       let apiParams = { template_type: selectedTemplateType };
@@ -696,8 +663,9 @@ const Gallery = () => {
     fetchFilteredTemplatesList(status);
   }, [tabs]);
   useEffect(() => {
+    setSelectedTemplateType("image"); // Force image templates only
     fetchFilteredTemplatesList(status);
-  }, [selectedTemplateType]); // This was missing!
+  }, []);
 
   useEffect(() => {
     return () => {
@@ -964,162 +932,59 @@ const Gallery = () => {
     });
   };
 
-  // const handleImageTemplateSubmit = async (imageData) => {
-  //   try {
-  //     // Convert text fields to text_positions format
-  //     const textPositions = {};
-  //     imageData.textFields.forEach(field => {
-  //       textPositions[field.name] = { x: field.x, y: field.y };
-  //     });
+  const handleImageTemplateSubmit = async (imageData) => {
+    try {
+      console.log("SUBMITTING IMAGE TEMPLATE with imageData:", imageData);
 
-  //     const formDataToSend = new FormData();
-  //     formDataToSend.append("name", imageData.templateName);
-  //     formDataToSend.append("template_image", imageData.templateImage);
-  //     formDataToSend.append("text_positions", JSON.stringify(textPositions));
-  //     formDataToSend.append("status", true);
+      const textPositions = {};
 
-  //     toast.loading("Saving image template...", { id: "save-image-template" });
+      if (imageData.textPositions) {
+        Object.keys(imageData.textPositions).forEach((key) => {
+          textPositions[key] = imageData.textPositions[key];
+        });
+      }
 
-  //     const response = await AddEmployeeTemplates(formDataToSend, 'image');
+      if (imageData.customText) {
+        textPositions.customText = {
+          ...textPositions.customText,
+          text: imageData.customText,
+          x: textPositions.customText?.x || 200,
+          y: textPositions.customText?.y || 50,
+        };
+      }
 
-  //     if (response && response.id) {
-  //       toast.success("Image template saved successfully!", { id: "save-image-template" });
-  //       fetchFilteredTemplatesList(status);
-  //       handleModalClose();
-  //     } else {
-  //       throw new Error("Failed to save image template");
-  //     }
-  //   } catch (error) {
-  //     console.error("Error saving image template:", error);
-  //     toast.error("Failed to save image template", { id: "save-image-template" });
-  //   }
-  // };
+      if (imageData.imageSettings) {
+        textPositions.imageSettings = imageData.imageSettings;
+        console.log("INCLUDING imageSettings in text_positions:", imageData.imageSettings);
+      }
 
-  // const handleImageTemplateSubmit = async (imageData) => {
-  //   try {
-  //     console.log("🔍 SUBMITTING IMAGE TEMPLATE with imageData:", imageData); // DEBUG
+      console.log("Final text_positions being saved:", textPositions);
 
-  //     const textPositions = {};
+      const formDataToSend = new FormData();
+      formDataToSend.append("name", imageData.templateName);
+      formDataToSend.append("template_image", imageData.templateImage);
+      formDataToSend.append("text_positions", JSON.stringify(textPositions));
+      formDataToSend.append("custom_text", imageData.customText || "");
+      formDataToSend.append("template_type", "image");
+      formDataToSend.append("status", true);
+      formDataToSend.append("brand_area_settings", JSON.stringify(imageData.brandAreaSettings || {}));
 
-  //     if (imageData.textPositions) {
-  //       Object.keys(imageData.textPositions).forEach((key) => {
-  //         textPositions[key] = imageData.textPositions[key];
-  //       });
-  //     }
+      toast.loading("Saving image template...", { id: "save-image-template" });
 
-  //     if (imageData.customText) {
-  //       textPositions.customText = {
-  //         ...textPositions.customText,
-  //         text: imageData.customText,
-  //         x: textPositions.customText?.x || 200,
-  //         y: textPositions.customText?.y || 50,
-  //       };
-  //     }
+      const response = await AddEmployeeTemplates(formDataToSend, "image");
 
-  //     // CRITICAL: Add image settings to text_positions
-  //     if (imageData.imageSettings) {
-  //       textPositions.imageSettings = imageData.imageSettings;
-  //       console.log(
-  //         "🔍 INCLUDING imageSettings in text_positions:",
-  //         imageData.imageSettings
-  //       ); // DEBUG
-  //     }
-
-  //     console.log("🔍 Final text_positions being saved:", textPositions); // DEBUG
-
-  //     const formDataToSend = new FormData();
-  //     formDataToSend.append("name", imageData.templateName);
-  //     formDataToSend.append("template_image", imageData.templateImage);
-  //     formDataToSend.append("text_positions", JSON.stringify(textPositions));
-  //     formDataToSend.append("custom_text", imageData.customText || "");
-  //     formDataToSend.append("template_type", "image");
-  //     formDataToSend.append("status", true);
-
-  //     // DEBUG: Log all FormData entries
-  //     for (let [key, value] of formDataToSend.entries()) {
-  //       if (key === "text_positions") {
-  //         console.log(`🔍 FormData ${key}:`, value);
-  //         console.log(`🔍 Parsed ${key}:`, JSON.parse(value));
-  //       } else {
-  //         console.log(`🔍 FormData ${key}:`, value);
-  //       }
-  //     }
-
-  //     toast.loading("Saving image template...", { id: "save-image-template" });
-
-  //     const response = await AddEmployeeTemplates(formDataToSend, "image");
-  //     console.log("🔍 Template save response:", response); // DEBUG
-
-  //     if (response && response.id) {
-  //       toast.success("Image template saved successfully!", {
-  //         id: "save-image-template",
-  //       });
-  //       fetchFilteredTemplatesList(status);
-  //       handleModalClose();
-  //     } else {
-  //       throw new Error("Failed to save image template - no ID returned");
-  //     }
-  //   } catch (error) {
-  //     console.error("🔍 Error saving image template:", error);
-  //     toast.error(`Failed to save: ${error.message}`, {
-  //       id: "save-image-template",
-  //     });
-  //   }
-  // };
-
-const handleImageTemplateSubmit = async (imageData) => {
-  try {
-    console.log("SUBMITTING IMAGE TEMPLATE with imageData:", imageData);
-
-    const textPositions = {};
-
-    if (imageData.textPositions) {
-      Object.keys(imageData.textPositions).forEach((key) => {
-        textPositions[key] = imageData.textPositions[key];
-      });
+      if (response && response.id) {
+        toast.success("Image template saved successfully!", { id: "save-image-template" });
+        fetchFilteredTemplatesList(status);
+        handleModalClose();
+      } else {
+        throw new Error("Failed to save image template - no ID returned");
+      }
+    } catch (error) {
+      console.error("Error saving image template:", error);
+      toast.error(`Failed to save: ${error.message}`, { id: "save-image-template" });
     }
-
-    if (imageData.customText) {
-      textPositions.customText = {
-        ...textPositions.customText,
-        text: imageData.customText,
-        x: textPositions.customText?.x || 200,
-        y: textPositions.customText?.y || 50,
-      };
-    }
-
-    if (imageData.imageSettings) {
-      textPositions.imageSettings = imageData.imageSettings;
-      console.log("INCLUDING imageSettings in text_positions:", imageData.imageSettings);
-    }
-
-    console.log("Final text_positions being saved:", textPositions);
-
-    const formDataToSend = new FormData();
-    formDataToSend.append("name", imageData.templateName);
-    formDataToSend.append("template_image", imageData.templateImage);
-    formDataToSend.append("text_positions", JSON.stringify(textPositions));
-    formDataToSend.append("custom_text", imageData.customText || "");
-    formDataToSend.append("template_type", "image");
-    formDataToSend.append("status", true);
-    formDataToSend.append("brand_area_settings", JSON.stringify(imageData.brandAreaSettings || {}));
-
-    toast.loading("Saving image template...", { id: "save-image-template" });
-
-    const response = await AddEmployeeTemplates(formDataToSend, "image");
-
-    if (response && response.id) {
-      toast.success("Image template saved successfully!", { id: "save-image-template" });
-      fetchFilteredTemplatesList(status);
-      handleModalClose();
-    } else {
-      throw new Error("Failed to save image template - no ID returned");
-    }
-  } catch (error) {
-    console.error("Error saving image template:", error);
-    toast.error(`Failed to save: ${error.message}`, { id: "save-image-template" });
-  }
-};
+  };
 
   return (
     <div className="min-h-screen bg-white px-12 py-11">
@@ -1131,9 +996,10 @@ const handleImageTemplateSubmit = async (imageData) => {
               <h2 className="text-xl font-bold">
                 {isEditPage
                   ? "Edit Template"
-                  : `Add New ${
-                      selectedTemplateType === "video" ? "Video" : "Image"
-                    } Template`}
+                  : FEATURE_FLAGS.ENABLE_VIDEO_FEATURES
+                    ? `Add New ${selectedTemplateType === "video" ? "Video" : "Image"} Template`
+                    : "Add New Template"
+                }
               </h2>
               <button
                 onClick={handleModalClose}
@@ -1367,136 +1233,6 @@ const handleImageTemplateSubmit = async (imageData) => {
         </div>
       )}
 
-      {isAddModalOpen && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 w-full max-w-md">
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-xl font-bold">Add New Item</h2>
-              <button
-                onClick={() => {
-                  setIsAddModalOpen(false);
-                  setSelectedTemplate("");
-                }}
-                className="text-gray-500 hover:text-gray-700"
-              >
-                &times;
-              </button>
-            </div>
-
-            <div className="space-y-4">
-              <div className="w-full mb-4">
-                <label className="text-sm font-medium mb-1 block">
-                  Select Video Template
-                </label>
-                <div className="space-y-3">
-                  {/* Template Type Selection */}
-                  <div>
-                    <label className="text-sm font-medium mb-1 block">
-                      Template Type
-                    </label>
-                    <div className="flex gap-4">
-                      <label className="flex items-center">
-                        <input
-                          type="radio"
-                          name="templateType"
-                          value="video"
-                          checked={templateType === "video"}
-                          onChange={(e) => setTemplateType(e.target.value)}
-                          className="mr-2"
-                        />
-                        Video Template
-                      </label>
-                      <label className="flex items-center">
-                        <input
-                          type="radio"
-                          name="templateType"
-                          value="image"
-                          checked={templateType === "image"}
-                          onChange={(e) => setTemplateType(e.target.value)}
-                          className="mr-2"
-                        />
-                        Image Template
-                      </label>
-                    </div>
-                  </div>
-                  {/* Doctor Image Upload - Only show for image templates */}
-                  {templateType === "image" && (
-                    <div>
-                      <label className="text-sm font-medium mb-1 block">
-                        Doctor Photo (Optional)
-                      </label>
-                      <input
-                        type="file"
-                        accept="image/*"
-                        onChange={(e) => {
-                          const file = e.target.files[0];
-                          if (file) {
-                            setUploadedDoctorImage(file);
-                            console.log(
-                              "🔍 Frontend: Doctor image selected:",
-                              file.name
-                            );
-                          }
-                        }}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
-                      />
-                      {uploadedDoctorImage && (
-                        <div className="mt-2 text-green-600 text-sm">
-                          ✅ Image selected: {uploadedDoctorImage.name}
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                  {/* Template Selection */}
-                  <div>
-                    <label className="text-sm font-medium mb-1 block">
-                      Select {templateType === "video" ? "Video" : "Image"}{" "}
-                      Template
-                    </label>
-                    <select
-                      className="w-full border border-gray-300 rounded-md px-4 py-2"
-                      value={selectedTemplate}
-                      onChange={(e) => setSelectedTemplate(e.target.value)}
-                    >
-                      <option value="">Choose Template</option>
-                      {(templateType === "video"
-                        ? listTemplates
-                        : imageTemplates
-                      ).map((template) => (
-                        <option key={template.id} value={template.id}>
-                          {template.name}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-              </div>
-
-              <div className="flex justify-end pt-4">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIsAddModalOpen(false);
-                    setSelectedTemplate("");
-                  }}
-                  className="mr-3 px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  onClick={handleAddTemplateSubmit}
-                  className="px-4 py-2 bg-blue-800 text-white rounded-md hover:bg-blue-900"
-                  disabled={!selectedTemplate}
-                >
-                  Submit
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
       {isRecreateModalOpen && (
         <div className="fixed inset-0 bg-black/50  flex items-center justify-center z-50">
           <div className="bg-white rounded-lg p-6 w-full max-w-md">
@@ -1773,40 +1509,45 @@ const handleImageTemplateSubmit = async (imageData) => {
             </div>
 
             <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Content Type
-                </label>
-                <div className="flex space-x-4">
-                  <label className="flex items-center">
-                    <input
-                      type="radio"
-                      name="contentType"
-                      value="video"
-                      checked={regenerateContentType === "video"}
-                      onChange={(e) => setRegenerateContentType(e.target.value)}
-                      className="mr-2"
-                    />
-                    📹 Video
+              {FEATURE_FLAGS.ENABLE_VIDEO_FEATURES ? (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Content Type
                   </label>
-                  <label className="flex items-center">
-                    <input
-                      type="radio"
-                      name="contentType"
-                      value="image"
-                      checked={regenerateContentType === "image"}
-                      onChange={(e) => setRegenerateContentType(e.target.value)}
-                      className="mr-2"
-                    />
-                    🖼️ Image
-                  </label>
+                  <div className="flex items-center space-x-6">
+                    <label className="flex items-center">
+                      <input
+                        type="radio"
+                        name="contentType"
+                        value="video"
+                        checked={regenerateContentType === "video"}
+                        onChange={(e) => setRegenerateContentType(e.target.value)}
+                        className="mr-2"
+                      />
+                      📹 Video
+                    </label>
+                    <label className="flex items-center">
+                      <input
+                        type="radio"
+                        name="contentType"
+                        value="image"
+                        checked={regenerateContentType === "image"}
+                        onChange={(e) => setRegenerateContentType(e.target.value)}
+                        className="mr-2"
+                      />
+                      🖼️ Image
+                    </label>
+                  </div>
                 </div>
-              </div>
+              ) : (
+                <input type="hidden" name="contentType" value="image" />
+              )}
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Select {regenerateContentType === "video" ? "Video" : "Image"}{" "}
-                  Template
+                  Select {FEATURE_FLAGS.ENABLE_VIDEO_FEATURES ?
+                    (regenerateContentType === "video" ? "Video" : "Image") :
+                    "Image"} Template
                 </label>
                 <select
                   value={selectedTemplate}
@@ -1814,9 +1555,9 @@ const handleImageTemplateSubmit = async (imageData) => {
                   className="w-full border border-gray-300 rounded-md px-4 py-2"
                 >
                   <option value="">Choose Template</option>
-                  {(regenerateContentType === "video"
-                    ? listTemplates
-                    : imageTemplates
+                  {(FEATURE_FLAGS.ENABLE_VIDEO_FEATURES ?
+                    (regenerateContentType === "video" ? listTemplates : imageTemplates) :
+                    imageTemplates
                   ).map((template) => (
                     <option key={template.id} value={template.id}>
                       {template.name}
@@ -1869,14 +1610,14 @@ const handleImageTemplateSubmit = async (imageData) => {
                         content_data:
                           regenerateContentType === "image"
                             ? {
-                                // NO custom_text - template handles this
-                                doctor_name: selectedDoctorForEdit.name,
-                                doctor_clinic: selectedDoctorForEdit.clinic,
-                                doctor_city: selectedDoctorForEdit.city,
-                                doctor_specialization:
-                                  selectedDoctorForEdit.specialization,
-                                doctor_state: selectedDoctorForEdit.state,
-                              }
+                              // NO custom_text - template handles this
+                              doctor_name: selectedDoctorForEdit.name,
+                              doctor_clinic: selectedDoctorForEdit.clinic,
+                              doctor_city: selectedDoctorForEdit.city,
+                              doctor_specialization:
+                                selectedDoctorForEdit.specialization,
+                              doctor_state: selectedDoctorForEdit.state,
+                            }
                             : {},
                       };
 
@@ -1887,9 +1628,8 @@ const handleImageTemplateSubmit = async (imageData) => {
                       await regenerateContent(payload);
 
                       toast.success(
-                        `${
-                          regenerateContentType.charAt(0).toUpperCase() +
-                          regenerateContentType.slice(1)
+                        `${regenerateContentType.charAt(0).toUpperCase() +
+                        regenerateContentType.slice(1)
                         } regenerated successfully!`,
                         { id: "regenerate-content" }
                       );
@@ -1907,7 +1647,10 @@ const handleImageTemplateSubmit = async (imageData) => {
                   }}
                   className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
                 >
-                  Regenerate {regenerateContentType === "video" ? "📹" : "🖼️"}
+                  {FEATURE_FLAGS.ENABLE_VIDEO_FEATURES ?
+                    `Regenerate ${regenerateContentType === "video" ? "📹" : "🖼️"}` :
+                    "Regenerate 🖼️"
+                  }
                 </button>
               </div>
             </div>
@@ -1920,11 +1663,11 @@ const handleImageTemplateSubmit = async (imageData) => {
       </div>
 
       <nav className="text-lg text-gray-500 mb-4 space-x-1 font-bold">
-        <span>My Videos</span>
+        <span>{FEATURE_FLAGS.ENABLE_VIDEO_FEATURES ? "My Content" : "My Images"}</span>
         <span>&gt;</span>
         <span>Templates</span>
         <span>&gt;</span>
-        <span className="text-gray-900 font-medium">Videos</span>
+        <span className="text-gray-900 font-medium">{FEATURE_FLAGS.ENABLE_VIDEO_FEATURES ? "Content" : "Images"}</span>
       </nav>
 
       <div className="mt-15 mb-10">
@@ -1935,7 +1678,7 @@ const handleImageTemplateSubmit = async (imageData) => {
         </h1>
         <p className="text-gray-600 font-semibold text-lg">
           {viewMode === "gallery" && USERTYPE === "Admin"
-            ? "Choose a template to start your next video project."
+            ? "Choose a template to start your next project."
             : "View and manage doctor information."}
         </p>
       </div>
@@ -1943,24 +1686,22 @@ const handleImageTemplateSubmit = async (imageData) => {
       <div className="w-full flex justify-center gap-4 mb-6">
         <button
           onClick={() => setViewMode("table")}
-          className={`px-4 py-2 rounded-md font-bold flex items-center gap-2 ${
-            viewMode === "table"
-              ? "bg-blue-800 text-white"
-              : "bg-gray-200 text-gray-700"
-          }`}
+          className={`px-4 py-2 rounded-md font-bold flex items-center gap-2 ${viewMode === "table"
+            ? "bg-blue-800 text-white"
+            : "bg-gray-200 text-gray-700"
+            }`}
         >
           <FaTable /> Table
         </button>
         {USERTYPE === "Admin" && (
           <button
             onClick={() => setViewMode("gallery")}
-            className={`px-4 py-2 rounded-md font-bold flex items-center gap-2 ${
-              viewMode === "gallery"
-                ? "bg-blue-800 text-white"
-                : "bg-gray-200 text-gray-700"
-            }`}
+            className={`px-4 py-2 rounded-md font-bold flex items-center gap-2 ${viewMode === "gallery"
+              ? "bg-blue-800 text-white"
+              : "bg-gray-200 text-gray-700"
+              }`}
           >
-            <FaVideo /> Gallery
+            <FaImage /> Gallery
           </button>
         )}
         {viewMode === "table" && (
@@ -1986,31 +1727,31 @@ const handleImageTemplateSubmit = async (imageData) => {
           <div className="flex justify-between items-center mb-5">
             {/* ADD TEMPLATE TYPE TABS */}
             <div className="flex items-center gap-2">
-              <button
-                onClick={() => {
-                  setSelectedTemplateType("video");
-                  fetchFilteredTemplatesList(status);
-                }}
-                className={`font-bold px-4 py-2 rounded transition ${
-                  selectedTemplateType === "video"
+              {FEATURE_FLAGS.ENABLE_VIDEO_FEATURES && (
+                <button
+                  onClick={() => {
+                    setSelectedTemplateType("video");
+                    fetchFilteredTemplatesList(status);
+                  }}
+                  className={`font-bold px-4 py-2 rounded transition ${selectedTemplateType === "video"
                     ? "bg-blue-800 text-white"
                     : "bg-gray-200 text-black hover:bg-gray-300"
-                }`}
-              >
-                Video Templates
-              </button>
+                    }`}
+                >
+                  Video Templates
+                </button>
+              )}
               <button
                 onClick={() => {
                   setSelectedTemplateType("image");
                   fetchFilteredTemplatesList(status);
                 }}
-                className={`font-bold px-4 py-2 rounded transition ${
-                  selectedTemplateType === "image"
-                    ? "bg-blue-800 text-white"
-                    : "bg-gray-200 text-black hover:bg-gray-300"
-                }`}
+                className={`font-bold px-4 py-2 rounded transition ${selectedTemplateType === "image"
+                  ? "bg-blue-800 text-white"
+                  : "bg-gray-200 text-black hover:bg-gray-300"
+                  }`}
               >
-                Image Templates
+                {FEATURE_FLAGS.ENABLE_VIDEO_FEATURES ? "Image Templates" : "Templates"}
               </button>
             </div>
 
@@ -2018,38 +1759,37 @@ const handleImageTemplateSubmit = async (imageData) => {
               onClick={() => setIsModalOpen(true)}
               className="font-bold bg-blue-800 text-white px-5 py-2 cursor-pointer rounded hover:bg-blue-900 transition"
             >
-              Add {selectedTemplateType === "video" ? "Video" : "Image"}{" "}
-              Template
+              {FEATURE_FLAGS.ENABLE_VIDEO_FEATURES ?
+                `Add ${selectedTemplateType === "video" ? "Video" : "Image"} Template` :
+                "Add Template"
+              }
             </button>
           </div>
           <div className="flex items-center gap-2 mb-4">
             <button
               onClick={() => handleTabs("all")}
-              className={`font-bold ${
-                tabs === "all"
-                  ? "bg-blue-800 text-white"
-                  : "bg-gray-200 text-black"
-              }   px-5 py-2 cursor-pointer rounded hover:bg-blue-900 transition`}
+              className={`font-bold ${tabs === "all"
+                ? "bg-blue-800 text-white"
+                : "bg-gray-200 text-black"
+                }   px-5 py-2 cursor-pointer rounded hover:bg-blue-900 transition`}
             >
               All
             </button>
             <button
               onClick={() => handleTabs("Active")}
-              className={`font-bold ${
-                tabs === "Active"
-                  ? "bg-blue-800 text-white"
-                  : "bg-gray-200 text-black"
-              }   px-5 py-2 cursor-pointer rounded hover:bg-blue-900 transition`}
+              className={`font-bold ${tabs === "Active"
+                ? "bg-blue-800 text-white"
+                : "bg-gray-200 text-black"
+                }   px-5 py-2 cursor-pointer rounded hover:bg-blue-900 transition`}
             >
               Active
             </button>
             <button
               onClick={() => handleTabs("Inactive")}
-              className={`font-bold ${
-                tabs === "Inactive"
-                  ? "bg-blue-800 text-white"
-                  : "bg-gray-200 text-black"
-              }   px-5 py-2 cursor-pointer rounded hover:bg-blue-900 transition`}
+              className={`font-bold ${tabs === "Inactive"
+                ? "bg-blue-800 text-white"
+                : "bg-gray-200 text-black"
+                }   px-5 py-2 cursor-pointer rounded hover:bg-blue-900 transition`}
             >
               Inactive
             </button>
@@ -2060,24 +1800,21 @@ const handleImageTemplateSubmit = async (imageData) => {
               return (
                 <div
                   key={template.id}
-                  className={`border rounded-xl p-6 flex flex-col justify-between transition-all ${
-                    !template.status
-                      ? "bg-gray-100 border-gray-300 opacity-75"
-                      : "bg-blue-50 border-gray-200 hover:shadow-md"
-                  }`}
+                  className={`border rounded-xl p-6 flex flex-col justify-between transition-all ${!template.status
+                    ? "bg-gray-100 border-gray-300 opacity-75"
+                    : "bg-blue-50 border-gray-200 hover:shadow-md"
+                    }`}
                 >
                   {/* <div className="text-xs text-red-500 mb-2">
                     Debug: Type = {template.template_type || 'UNDEFINED'}
                   </div> */}
                   <div
-                    className={`w-full mb-4 ${
-                      !template.status ? "text-gray-600" : ""
-                    }`}
+                    className={`w-full mb-4 ${!template.status ? "text-gray-600" : ""
+                      }`}
                   >
                     <div
-                      className={`w-12 h-12 rounded-full shadow flex items-center justify-center mb-4 ${
-                        !template.status ? "bg-gray-300" : "bg-[#0A0A6433]"
-                      }`}
+                      className={`w-12 h-12 rounded-full shadow flex items-center justify-center mb-4 ${!template.status ? "bg-gray-300" : "bg-[#0A0A6433]"
+                        }`}
                     >
                       {template.template_type === "image" ? (
                         <FaImage
@@ -2094,16 +1831,14 @@ const handleImageTemplateSubmit = async (imageData) => {
                       )}
                     </div>
                     <h3
-                      className={`text-xl font-bold mb-2 ${
-                        !template.status ? "text-gray-700" : "text-gray-900"
-                      }`}
+                      className={`text-xl font-bold mb-2 ${!template.status ? "text-gray-700" : "text-gray-900"
+                        }`}
                     >
                       {template.name}
                     </h3>
                     <p
-                      className={`text-sm ${
-                        !template.status ? "text-gray-500" : "text-gray-600"
-                      }`}
+                      className={`text-sm ${!template.status ? "text-gray-500" : "text-gray-600"
+                        }`}
                     >
                       Created:{" "}
                       {new Date(template.created_at).toLocaleDateString()}
@@ -2124,11 +1859,10 @@ const handleImageTemplateSubmit = async (imageData) => {
                       <button
                         onClick={() => template.status && navigate("/gallery")}
                         disabled={!template.status}
-                        className={`w-full py-2 rounded-md font-bold text-sm flex items-center justify-center gap-2 transition ${
-                          !template.status
-                            ? "bg-gray-300 text-gray-500 cursor-not-allowed"
-                            : "bg-blue-800 text-white hover:bg-blue-900"
-                        }`}
+                        className={`w-full py-2 rounded-md font-bold text-sm flex items-center justify-center gap-2 transition ${!template.status
+                          ? "bg-gray-300 text-gray-500 cursor-not-allowed"
+                          : "bg-blue-800 text-white hover:bg-blue-900"
+                          }`}
                       >
                         {template.template_type === "image" ? (
                           <FaImage />
@@ -2147,11 +1881,10 @@ const handleImageTemplateSubmit = async (imageData) => {
 
                     <div className="flex space-x-2">
                       <button
-                        className={`w-full border py-2 rounded-md font-bold transition ${
-                          !template.status
-                            ? "border-gray-300 bg-gray-100 text-gray-400 cursor-not-allowed"
-                            : "border-gray-400 bg-white text-gray-800 hover:bg-gray-100"
-                        }`}
+                        className={`w-full border py-2 rounded-md font-bold transition ${!template.status
+                          ? "border-gray-300 bg-gray-100 text-gray-400 cursor-not-allowed"
+                          : "border-gray-400 bg-white text-gray-800 hover:bg-gray-100"
+                          }`}
                         onClick={() => {
                           if (!template.status) return;
                           console.log("Template preview data:", template); // DEBUG
@@ -2227,11 +1960,10 @@ const handleImageTemplateSubmit = async (imageData) => {
                       </button>
 
                       <button
-                        className={`w-full py-2 rounded-md font-bold transition ${
-                          !template.status
-                            ? "bg-gray-700 text-white hover:bg-gray-600"
-                            : "border border-red-400 bg-white text-red-600 hover:bg-red-50"
-                        }`}
+                        className={`w-full py-2 rounded-md font-bold transition ${!template.status
+                          ? "bg-gray-700 text-white hover:bg-gray-600"
+                          : "border border-red-400 bg-white text-red-600 hover:bg-red-50"
+                          }`}
                         onClick={() =>
                           handleDisableTemplate(
                             template.id,
@@ -2274,15 +2006,15 @@ const handleImageTemplateSubmit = async (imageData) => {
                 <FaSearch size={20} />
               </div>
               <input
-                type="text"
-                placeholder="Search by doctor name..."
-                value={searchTerm}
-                onChange={(e) => {
-                  setSearchTerm(e.target.value);
-                  setCurrentPage(1);
-                }}
-                className="border border-gray-300 rounded px-3 py-1 ml-4"
-              />
+  type="text"
+  placeholder="Search by doctor name..."
+  value={searchTerm}
+  onChange={(e) => {
+    setSearchTerm(e.target.value);
+    setPage(1); // Reset to first page when searching
+  }}
+  className="border border-gray-300 rounded px-3 py-1 ml-4 w-64"
+/>
             </div>
           </div>
 
@@ -2331,11 +2063,10 @@ const handleImageTemplateSubmit = async (imageData) => {
                         >
                           <div className="py-1 max-h-60 overflow-auto">
                             <div
-                              className={`px-4 py-2 text-sm cursor-pointer ${
-                                selectedSpecialization === ""
-                                  ? "bg-blue-100 text-blue-800"
-                                  : "text-gray-700 hover:bg-gray-100"
-                              }`}
+                              className={`px-4 py-2 text-sm cursor-pointer ${selectedSpecialization === ""
+                                ? "bg-blue-100 text-blue-800"
+                                : "text-gray-700 hover:bg-gray-100"
+                                }`}
                               onClick={() => {
                                 setSelectedSpecialization("");
                                 setShowSpecializationFilter(false);
@@ -2346,11 +2077,10 @@ const handleImageTemplateSubmit = async (imageData) => {
                             {getUniqueSpecializations().map((spec) => (
                               <div
                                 key={spec}
-                                className={`px-4 py-2 text-sm cursor-pointer ${
-                                  selectedSpecialization === spec
-                                    ? "bg-blue-100 text-blue-800"
-                                    : "text-gray-700 hover:bg-gray-100"
-                                }`}
+                                className={`px-4 py-2 text-sm cursor-pointer ${selectedSpecialization === spec
+                                  ? "bg-blue-100 text-blue-800"
+                                  : "text-gray-700 hover:bg-gray-100"
+                                  }`}
                                 onClick={() => {
                                   setSelectedSpecialization(spec);
                                   setShowSpecializationFilter(false);
@@ -2387,20 +2117,21 @@ const handleImageTemplateSubmit = async (imageData) => {
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       RBM
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Video Link
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Video
-                    </th>
+                    {FEATURE_FLAGS.ENABLE_VIDEO_FEATURES && (
+                      <>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Video Link
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Video
+                        </th>
+                      </>
+                    )}
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Image Link
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Image
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Select Template
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Share
@@ -2462,116 +2193,98 @@ const handleImageTemplateSubmit = async (imageData) => {
                           {" "}
                           {doctor.rbm_name}
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                          {doctor.latest_output_video &&
-                          doctor.latest_output_video.length > 0 ? (
-                            <button
-                              onClick={() => {
-                                const latestVideo =
-                                  doctor.latest_output_video[0];
-                                navigator.clipboard.writeText(
-                                  // `http://api.videomaker.digielvestech.in${latestVideo?.video_file}`
-                                  `http://127.0.0.1:8000/${latestVideo?.video_file}`
-                                );
-                                toast.success(
-                                  "Video link copied to clipboard!"
-                                );
-                              }}
-                              className="text-blue-600 hover:underline font-bold cursor-pointer"
-                            >
-                              Copy Video Link
-                            </button>
-                          ) : (
-                            <span className="text-gray-500">No video</span>
-                          )}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                          {doctor.latest_output_video &&
-                          doctor.latest_output_video.length > 0 ? (
-                            // <a href={`http://api.videomaker.digielvestech.in${doctor.latest_output_video[
-                            <a
-                              href={`http://127.0.0.1:8000/${
-                                doctor.latest_output_video[
-                                  doctor.latest_output_video.length - 1
-                                ]?.video_file
-                              }`}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="text-blue-600 hover:underline font-semibold"
-                            >
-                              View Video
-                            </a>
-                          ) : (
-                            <div className="flex flex-col space-y-1">
-                              <span className="text-red-500 text-xs">
-                                No videos yet
-                              </span>
-                              {/* Only show Create Video button if no image exists */}
-                              {!doctor.latest_output_image ||
-                              doctor.latest_output_image.length === 0 ? (
+                        {FEATURE_FLAGS.ENABLE_VIDEO_FEATURES && (
+                          <>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                              {doctor.latest_output_video &&
+                                doctor.latest_output_video.length > 0 ? (
                                 <button
-                                  onClick={() => handleRecreateModal(doctor.id)}
-                                  className="px-3 py-1 bg-blue-600 text-white rounded-md text-sm hover:bg-blue-700 transition flex items-center justify-center"
+                                  onClick={() => {
+                                    const latestVideo = doctor.latest_output_video[0];
+                                    navigator.clipboard.writeText(
+                                      `http://127.0.0.1:8000/${latestVideo?.video_file}`
+                                    );
+                                    toast.success("Video link copied to clipboard!");
+                                  }}
+                                  className="text-blue-600 hover:underline font-bold cursor-pointer"
                                 >
-                                  Create Video
+                                  Copy Video Link
                                 </button>
                               ) : (
-                                <span className="text-gray-400 text-xs italic">
-                                  Image available instead
-                                </span>
+                                <span className="text-gray-500">No video</span>
                               )}
-                            </div>
-                          )}
-                        </td>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                              {doctor.latest_output_video &&
+                                doctor.latest_output_video.length > 0 ? (
+
+                                <a href={`http://127.0.0.1:8000/${doctor.latest_output_video[
+                                  doctor.latest_output_video.length - 1
+                                ]?.video_file
+                                  }`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-blue-600 hover:underline font-semibold"
+                                >
+                                  View Video
+                                </a>
+                              ) : (
+                                <div className="flex flex-col space-y-1">
+                                  <span className="text-red-500 text-xs">No videos yet</span>
+                                </div>
+                              )}
+                            </td>
+                          </>
+                        )}
                         {/* ADD THESE TWO NEW IMAGE COLUMNS: */}
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                           {doctor.latest_output_image &&
-                          doctor.latest_output_image.length > 0 ? (
+                            doctor.latest_output_image.length > 0 ? (
                             <button
-  onClick={async () => {
-    try {
-      const latestImage = doctor.latest_output_image[0];
-      const url = getAbsoluteImageUrl(
-        latestImage.output_image_url ||
-          latestImage.output_image
-      );
-      await navigator.clipboard.writeText(url);
-      toast.success("Image link copied to clipboard!");
-    } catch (error) {
-      console.error('Copy failed:', error);
-      // Fallback for older browsers
-      const textArea = document.createElement('textarea');
-      textArea.value = url;
-      document.body.appendChild(textArea);
-      textArea.select();
-      document.execCommand('copy');
-      document.body.removeChild(textArea);
-      toast.success("Image link copied to clipboard!");
-    }
-  }}
-  className="text-green-600 hover:underline font-bold cursor-pointer"
->
-  Copy Image Link
-</button>
+                              onClick={async () => {
+                                try {
+                                  const latestImage = doctor.latest_output_image[0];
+                                  const url = getAbsoluteImageUrl(
+                                    latestImage.output_image_url ||
+                                    latestImage.output_image
+                                  );
+                                  await navigator.clipboard.writeText(url);
+                                  toast.success("Image link copied to clipboard!");
+                                } catch (error) {
+                                  console.error('Copy failed:', error);
+                                  // Fallback for older browsers
+                                  const textArea = document.createElement('textarea');
+                                  textArea.value = url;
+                                  document.body.appendChild(textArea);
+                                  textArea.select();
+                                  document.execCommand('copy');
+                                  document.body.removeChild(textArea);
+                                  toast.success("Image link copied to clipboard!");
+                                }
+                              }}
+                              className="text-green-600 hover:underline font-bold cursor-pointer"
+                            >
+                              Copy Image Link
+                            </button>
                           ) : (
                             <span className="text-gray-500">Not available</span>
                           )}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                           {doctor.latest_output_image &&
-                          doctor.latest_output_image.length > 0 ? (
+                            doctor.latest_output_image.length > 0 ? (
                             <button
-  onClick={() => {
-    const url = getAbsoluteImageUrl(
-      doctor.latest_output_image[0]?.output_image_url ||
-        doctor.latest_output_image[0]?.output_image
-    );
-    window.open(url, '_blank', 'noopener,noreferrer');
-  }}
-  className="text-green-600 hover:underline font-semibold cursor-pointer bg-transparent border-none p-0"
->
-  View Image
-</button>
+                              onClick={() => {
+                                const url = getAbsoluteImageUrl(
+                                  doctor.latest_output_image[0]?.output_image_url ||
+                                  doctor.latest_output_image[0]?.output_image
+                                );
+                                window.open(url, '_blank', 'noopener,noreferrer');
+                              }}
+                              className="text-green-600 hover:underline font-semibold cursor-pointer bg-transparent border-none p-0"
+                            >
+                              View Image
+                            </button>
                           ) : (
                             <div className="flex flex-col space-y-1">
                               <span className="text-red-500 text-xs">
@@ -2579,7 +2292,7 @@ const handleImageTemplateSubmit = async (imageData) => {
                               </span>
                               {/* Only show Create Image button if no video exists */}
                               {!doctor.latest_output_video ||
-                              doctor.latest_output_video.length === 0 ? (
+                                doctor.latest_output_video.length === 0 ? (
                                 <button
                                   onClick={() =>
                                     handleRecreateImageModal(doctor.id)
@@ -2596,51 +2309,35 @@ const handleImageTemplateSubmit = async (imageData) => {
                             </div>
                           )}
                         </td>
-
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 font-semibold">
-                          <button
-                            onClick={() => {
-                              setSelectedDoctorId(doctor.id);
-                              setIsAddModalOpen(true);
-                            }}
-                            className="flex gap-2 font-medium"
-                          >
-                            Add{" "}
-                            <IoMdAddCircle className="font-medium" size={20} />
-                          </button>
-                        </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 font-semibold">
                           {doctor.whatsapp_number && (
                             <div className="flex items-center space-x-2">
                               {/* Video Share */}
-                              {doctor.latest_output_video &&
+                              {FEATURE_FLAGS.ENABLE_VIDEO_FEATURES && doctor.latest_output_video &&
                                 doctor.latest_output_video.length > 0 && (
-                                  // <a href={`https://wa.me/${doctor.whatsapp_number}?text=Check out this video: http://api.videomaker.digielvestech.in${doctor.latest_output_video[doctor.latest_output_video.length - 1]?.video_file}`}
-                                  <a
-                                    href={`https://wa.me/${doctor.whatsapp_number}?text=Check out this video: http://127.0.0.1:8000/${doctor.latest_output_video[0]?.video_file}`}
+
+                                  <a href={`https://wa.me/${doctor.whatsapp_number}?text=Check out this video: http://127.0.0.1:8000/${doctor.latest_output_video[0]?.video_file}`}
                                     target="_blank"
                                     rel="noopener noreferrer"
                                     className="text-blue-500 hover:text-blue-700 flex items-center"
                                     title="Share Video on WhatsApp"
                                   >
                                     <FaWhatsapp size={18} />
-                                    <span className="text-xs ml-1">📹</span>
+                                    <span className="text-xs ml-1">🎬</span>
                                   </a>
                                 )}
 
                               {/* Image Share */}
                               {doctor.latest_output_image &&
                                 doctor.latest_output_image.length > 0 && (
-                                  <a
-                                    href={`https://wa.me/${
-                                      doctor.whatsapp_number
-                                    }?text=Check out this image: ${
-                                      doctor.latest_output_image[
-                                        doctor.latest_output_image.length - 1
-                                      ]?.output_image_url ||
-                                      doctor.latest_output_image[
-                                        doctor.latest_output_image.length - 1
-                                      ]?.output_image
+
+                                  <a href={`https://wa.me/${doctor.whatsapp_number
+                                    }?text=Check out this image: ${doctor.latest_output_image[
+                                      doctor.latest_output_image.length - 1
+                                    ]?.output_image_url ||
+                                    doctor.latest_output_image[
+                                      doctor.latest_output_image.length - 1
+                                    ]?.output_image
                                     }`}
                                     target="_blank"
                                     rel="noopener noreferrer"
@@ -2648,12 +2345,11 @@ const handleImageTemplateSubmit = async (imageData) => {
                                     title="Share Image on WhatsApp"
                                   >
                                     <FaWhatsapp size={18} />
-                                    <span className="text-xs ml-1">🖼️</span>
                                   </a>
                                 )}
 
                               {/* No content available */}
-                              {(!doctor.latest_output_video ||
+                              {(!FEATURE_FLAGS.ENABLE_VIDEO_FEATURES || !doctor.latest_output_video ||
                                 doctor.latest_output_video.length === 0) &&
                                 (!doctor.latest_output_image ||
                                   doctor.latest_output_image.length === 0) && (
@@ -2676,17 +2372,18 @@ const handleImageTemplateSubmit = async (imageData) => {
                         </td>
                         {/* ADD THIS NEW ACTIONS COLUMN */}
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                          <div className="flex items-center space-x-2">
+                          <div className="flex items-center space-x-3">
                             {/* Edit Button */}
                             <button
                               onClick={() => {
                                 setSelectedDoctorForEdit(doctor);
                                 setIsEditDoctorModalOpen(true);
                               }}
-                              className="text-blue-600 hover:text-blue-800 p-1 rounded"
-                              title="Edit Doctor"
+                              className="flex items-center px-2 py-1 text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded-md transition-colors"
+                              title="Edit Doctor Details"
                             >
-                              <FaEdit size={16} />
+                              <FaEdit size={14} />
+                              <span className="ml-1 text-xs font-medium">Edit</span>
                             </button>
 
                             {/* Regenerate Button */}
@@ -2695,10 +2392,11 @@ const handleImageTemplateSubmit = async (imageData) => {
                                 setSelectedDoctorForEdit(doctor);
                                 setIsRegenerateModalOpen(true);
                               }}
-                              className="text-green-600 hover:text-green-800 p-1 rounded"
-                              title="Regenerate Content"
+                              className="flex items-center px-2 py-1 text-green-600 hover:text-green-800 hover:bg-green-50 rounded-md transition-colors"
+                              title="Generate New Content"
                             >
-                              🔄
+                              <FaImage size={14} />
+                              <span className="ml-1 text-xs font-medium">ReCreate</span>
                             </button>
 
                             {/* Delete Button */}
@@ -2707,221 +2405,222 @@ const handleImageTemplateSubmit = async (imageData) => {
                                 setSelectedDoctorForDelete(doctor);
                                 setIsDeleteConfirmModalOpen(true);
                               }}
-                              className="text-red-600 hover:text-red-800 p-1 rounded"
-                              title="Delete Doctor"
+                              className="flex items-center px-2 py-1 text-red-600 hover:text-red-800 hover:bg-red-50 rounded-md transition-colors"
+                              title="Delete Doctor & All Content"
                             >
-                              🗑️
+                              <FaTrash size={14} />
+                              <span className="ml-1 text-xs font-medium">Delete</span>
                             </button>
                           </div>
                         </td>
                       </tr>
 
-                      {expandedRows[doctor.id] && (
-                        <tr className="bg-gray-50">
-                          <td colSpan={16} className="px-6 py-4">
-                            <div className="flex flex-col space-y-4">
-                              {videoData[doctor.id] ? (
-                                videoData[doctor.id].length > 0 ? (
-                                  [...videoData[doctor.id]]
-                                    .sort(
-                                      (a, b) =>
-                                        new Date(b.created_at) -
-                                        new Date(a.created_at)
-                                    )
-                                    .map((video) => (
-                                      <div
-                                        key={video.id}
-                                        className="flex items-center justify-between p-4 bg-white rounded-lg shadow"
-                                      >
-                                        <div>
-                                          <p className="font-medium">
-                                            Video ID: {video.id}
-                                          </p>
-                                          <p className="text-sm text-gray-500 font-bold">
-                                            Created:{" "}
-                                            {new Date(
-                                              video.created_at
-                                            ).toLocaleString()}
-                                          </p>
+                      {
+                        expandedRows[doctor.id] && (
+                          <tr className="bg-gray-50">
+                            <td colSpan={15} className="px-6 py-4">
+                              <div className="flex flex-col space-y-4">
+                                {videoData[doctor.id] ? (
+                                  videoData[doctor.id].length > 0 ? (
+                                    [...videoData[doctor.id]]
+                                      .sort(
+                                        (a, b) =>
+                                          new Date(b.created_at) -
+                                          new Date(a.created_at)
+                                      )
+                                      .map((video) => (
+                                        <div
+                                          key={video.id}
+                                          className="flex items-center justify-between p-4 bg-white rounded-lg shadow"
+                                        >
+                                          <div>
+                                            <p className="font-medium">
+                                              Video ID: {video.id}
+                                            </p>
+                                            <p className="text-sm text-gray-500 font-bold">
+                                              Created:{" "}
+                                              {new Date(
+                                                video.created_at
+                                              ).toLocaleString()}
+                                            </p>
+                                          </div>
+                                          <div className="flex space-x-3">
+                                            {video.video_file ? (
+                                              <>
+                                                <button
+                                                  onClick={() => {
+                                                    // const videoUrl = `http://api.videomaker.digielvestech.in${video.video_file}`;
+                                                    const videoUrl = `http://127.0.0.1:8000/${video.video_file}`;
+                                                    navigator.clipboard.writeText(
+                                                      videoUrl
+                                                    );
+                                                    toast.success(
+                                                      "Video link copied!"
+                                                    );
+                                                  }}
+                                                  className="px-3 py-1 font-bold bg-blue-100 text-blue-800 rounded-md hover:bg-blue-200 text-sm"
+                                                >
+                                                  Copy Link
+                                                </button>
+                                                <a
+                                                  // href={`http://api.videomaker.digielvestech.in${video.video_file}`}
+                                                  href={`http://127.0.0.1:8000/${video.video_file}`}
+                                                  target="_blank"
+                                                  rel="noopener noreferrer"
+                                                  className="px-3 py-1 font-bold bg-green-100 text-green-800 rounded-md hover:bg-green-200 text-sm"
+                                                >
+                                                  View Video
+                                                </a>
+                                                <a
+                                                  href={`https://wa.me/`}
+                                                  target="_blank"
+                                                  rel="noopener noreferrer"
+                                                  className="text-green-500 hover:text-green-700"
+                                                >
+                                                  <FaWhatsapp size={20} />
+                                                </a>
+                                              </>
+                                            ) : (
+                                              <span className="text-yellow-600 text-sm flex items-center">
+                                                Video not available
+                                              </span>
+                                            )}
+                                          </div>
                                         </div>
-                                        <div className="flex space-x-3">
-                                          {video.video_file ? (
-                                            <>
-                                              <button
-                                                onClick={() => {
-                                                  // const videoUrl = `http://api.videomaker.digielvestech.in${video.video_file}`;
-                                                  const videoUrl = `http://127.0.0.1:8000/${video.video_file}`;
-                                                  navigator.clipboard.writeText(
-                                                    videoUrl
-                                                  );
-                                                  toast.success(
-                                                    "Video link copied!"
-                                                  );
-                                                }}
-                                                className="px-3 py-1 font-bold bg-blue-100 text-blue-800 rounded-md hover:bg-blue-200 text-sm"
-                                              >
-                                                Copy Link
-                                              </button>
-                                              <a
-                                                // href={`http://api.videomaker.digielvestech.in${video.video_file}`}
-                                                href={`http://127.0.0.1:8000/${video.video_file}`}
-                                                target="_blank"
-                                                rel="noopener noreferrer"
-                                                className="px-3 py-1 font-bold bg-green-100 text-green-800 rounded-md hover:bg-green-200 text-sm"
-                                              >
-                                                View Video
-                                              </a>
-                                              <a
-                                                href={`https://wa.me/`}
-                                                target="_blank"
-                                                rel="noopener noreferrer"
-                                                className="text-green-500 hover:text-green-700"
-                                              >
-                                                <FaWhatsapp size={20} />
-                                              </a>
-                                            </>
-                                          ) : (
-                                            <span className="text-yellow-600 text-sm flex items-center">
-                                              Video not available
-                                            </span>
-                                          )}
-                                        </div>
-                                      </div>
-                                    ))
+                                      ))
+                                  ) : (
+                                    <div className="text-center py-4 text-gray-500">
+                                      No videos found for this doctor
+                                    </div>
+                                  )
                                 ) : (
-                                  <div className="text-center py-4 text-gray-500">
-                                    No videos found for this doctor
+                                  <div className="text-center py-4">
+                                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-800 mx-auto"></div>
+                                    <p className="mt-2">
+                                      Loading video details...
+                                    </p>
                                   </div>
-                                )
-                              ) : (
-                                <div className="text-center py-4">
-                                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-800 mx-auto"></div>
-                                  <p className="mt-2">
-                                    Loading video details...
-                                  </p>
-                                </div>
-                              )}
-                            </div>
-                            {/* Image Content Section */}
-                            <div>
-                              <h4 className="font-bold text-green-800 mb-3 flex items-center">
-                                <FaImage className="mr-2" /> Images (
-                                {imageData[doctor.id]?.length || 0})
-                              </h4>
-                              {imageData[doctor.id] ? (
-                                imageData[doctor.id].length > 0 ? (
-                                  [...imageData[doctor.id]]
-                                    .sort(
-                                      (a, b) =>
-                                        new Date(b.created_at) -
-                                        new Date(a.created_at)
-                                    )
-                                    .map((image) => (
-                                      <div
-                                        key={image.id}
-                                        className="flex items-center justify-between p-4 bg-green-50 rounded-lg border border-green-200"
-                                      >
-                                        <div>
-                                          <p className="font-medium">
-                                            Image ID: {image.id}
-                                          </p>
-                                          <p className="text-sm text-gray-500 font-bold">
-                                            Created:{" "}
-                                            {new Date(
-                                              image.created_at
-                                            ).toLocaleString()}
-                                          </p>
-                                          <p className="text-sm text-gray-600">
-                                            Template:{" "}
-                                            {image.template_name || "Unknown"}
-                                          </p>
-                                        </div>
-                                        <div className="flex space-x-3">
-                                          {image.output_image_url ||
-                                          image.output_image ? (
-                                            <>
-                                              <button
-                                                onClick={() => {
-                                                  const imageUrl =
+                                )}
+                              </div>
+                              {/* Image Content Section */}
+                              <div>
+                                <h4 className="font-bold text-green-800 mb-3 flex items-center">
+                                  <FaImage className="mr-2" /> Images (
+                                  {imageData[doctor.id]?.length || 0})
+                                </h4>
+                                {imageData[doctor.id] ? (
+                                  imageData[doctor.id].length > 0 ? (
+                                    [...imageData[doctor.id]]
+                                      .sort(
+                                        (a, b) =>
+                                          new Date(b.created_at) -
+                                          new Date(a.created_at)
+                                      )
+                                      .map((image) => (
+                                        <div
+                                          key={image.id}
+                                          className="flex items-center justify-between p-4 bg-green-50 rounded-lg border border-green-200"
+                                        >
+                                          <div>
+                                            <p className="font-medium">
+                                              Image ID: {image.id}
+                                            </p>
+                                            <p className="text-sm text-gray-500 font-bold">
+                                              Created:{" "}
+                                              {new Date(
+                                                image.created_at
+                                              ).toLocaleString()}
+                                            </p>
+                                            <p className="text-sm text-gray-600">
+                                              Template:{" "}
+                                              {image.template_name || "Unknown"}
+                                            </p>
+                                          </div>
+                                          <div className="flex space-x-3">
+                                            {image.output_image_url ||
+                                              image.output_image ? (
+                                              <>
+                                                <button
+                                                  onClick={() => {
+                                                    const imageUrl =
+                                                      image.output_image_url ||
+                                                      image.output_image;
+                                                    navigator.clipboard.writeText(
+                                                      imageUrl
+                                                    );
+                                                    toast.success(
+                                                      "Image link copied!"
+                                                    );
+                                                  }}
+                                                  className="px-3 py-1 font-bold bg-green-100 text-green-800 rounded-md hover:bg-green-200 text-sm"
+                                                >
+                                                  Copy Link
+                                                </button>
+
+                                                <a
+                                                  href={
                                                     image.output_image_url ||
-                                                    image.output_image;
-                                                  navigator.clipboard.writeText(
-                                                    imageUrl
-                                                  );
-                                                  toast.success(
-                                                    "Image link copied!"
-                                                  );
-                                                }}
-                                                className="px-3 py-1 font-bold bg-green-100 text-green-800 rounded-md hover:bg-green-200 text-sm"
-                                              >
-                                                Copy Link
-                                              </button>
+                                                    image.output_image
+                                                  }
+                                                  target="_blank"
+                                                  rel="noopener noreferrer"
+                                                  className="px-3 py-1 font-bold bg-blue-100 text-blue-800 rounded-md hover:bg-blue-200 text-sm"
+                                                >
+                                                  View Image
+                                                </a>
 
-                                              <a
-                                                href={
-                                                  image.output_image_url ||
-                                                  image.output_image
-                                                }
-                                                target="_blank"
-                                                rel="noopener noreferrer"
-                                                className="px-3 py-1 font-bold bg-blue-100 text-blue-800 rounded-md hover:bg-blue-200 text-sm"
-                                              >
-                                                View Image
-                                              </a>
-
-                                              <a
-                                                href={`https://wa.me/${
-                                                  doctor.whatsapp_number
-                                                }?text=Check out this image: ${
-                                                  image.output_image_url ||
-                                                  image.output_image
-                                                }`}
-                                                target="_blank"
-                                                rel="noopener noreferrer"
-                                                className="text-green-500 hover:text-green-700"
-                                              >
-                                                <FaWhatsapp size={20} />
-                                              </a>
-                                            </>
-                                          ) : (
-                                            <span className="text-yellow-600 text-sm flex items-center">
-                                              Image not available
-                                            </span>
-                                          )}
+                                                <a
+                                                  href={`https://wa.me/${doctor.whatsapp_number
+                                                    }?text=Check out this image: ${image.output_image_url ||
+                                                    image.output_image
+                                                    }`}
+                                                  target="_blank"
+                                                  rel="noopener noreferrer"
+                                                  className="text-green-500 hover:text-green-700"
+                                                >
+                                                  <FaWhatsapp size={20} />
+                                                </a>
+                                              </>
+                                            ) : (
+                                              <span className="text-yellow-600 text-sm flex items-center">
+                                                Image not available
+                                              </span>
+                                            )}
+                                          </div>
                                         </div>
-                                      </div>
-                                    ))
+                                      ))
+                                  ) : (
+                                    <div className="text-center py-4 text-gray-500 bg-gray-100 rounded-lg">
+                                      No images found for this doctor
+                                      <button
+                                        onClick={() =>
+                                          handleRecreateImageModal(doctor.id)
+                                        }
+                                        className="block mx-auto mt-2 px-3 py-1 bg-green-600 text-white rounded-md text-sm hover:bg-green-700"
+                                      >
+                                        Create First Image
+                                      </button>
+                                    </div>
+                                  )
                                 ) : (
-                                  <div className="text-center py-4 text-gray-500 bg-gray-100 rounded-lg">
-                                    No images found for this doctor
-                                    <button
-                                      onClick={() =>
-                                        handleRecreateImageModal(doctor.id)
-                                      }
-                                      className="block mx-auto mt-2 px-3 py-1 bg-green-600 text-white rounded-md text-sm hover:bg-green-700"
-                                    >
-                                      Create First Image
-                                    </button>
+                                  <div className="text-center py-4">
+                                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-600 mx-auto"></div>
+                                    <p className="mt-2">
+                                      Loading image details...
+                                    </p>
                                   </div>
-                                )
-                              ) : (
-                                <div className="text-center py-4">
-                                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-600 mx-auto"></div>
-                                  <p className="mt-2">
-                                    Loading image details...
-                                  </p>
-                                </div>
-                              )}
-                            </div>
-                          </td>
-                        </tr>
-                      )}
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        )
+                      }
                     </React.Fragment>
                   ))}
                 </tbody>
               </table>
             </div>
-            <div className="flex justify-end mt-4 mb-3 mx-3 items-center space-x-2">
+            <div className="flex justify-center mt-4 mb-3 mx-3 items-center space-x-2">
               <button
                 onClick={() => setPage(1)}
                 disabled={page === 1}
@@ -2929,7 +2628,6 @@ const handleImageTemplateSubmit = async (imageData) => {
               >
                 First
               </button>
-
               <button
                 onClick={() => setPage((prev) => Math.max(prev - 1, 1))}
                 disabled={!prevPageUrl}
@@ -2937,21 +2635,18 @@ const handleImageTemplateSubmit = async (imageData) => {
               >
                 Previous
               </button>
-
               {getPageNumbers().map((pageNumber) => (
                 <button
                   key={pageNumber}
                   onClick={() => setPage(pageNumber)}
-                  className={`px-4 py-1 rounded ${
-                    pageNumber === page
+                  className={`px-4 py-1 rounded ${pageNumber === page
                       ? "bg-blue-500 text-white font-semibold shadow"
                       : "bg-gray-200"
-                  }`}
+                    }`}
                 >
                   {pageNumber}
                 </button>
               ))}
-
               <button
                 onClick={() => setPage((prev) => prev + 1)}
                 disabled={!nextPageUrl}
@@ -2959,7 +2654,6 @@ const handleImageTemplateSubmit = async (imageData) => {
               >
                 Next
               </button>
-
               <button
                 onClick={() => setPage(totalPages)}
                 disabled={page === totalPages}
@@ -2969,91 +2663,11 @@ const handleImageTemplateSubmit = async (imageData) => {
               </button>
             </div>
 
-            {/* <div className="flex items-center justify-between px-4 py-3 bg-white border-t border-gray-200">
-              <div>
-                Showing {indexOfFirstRow + 1} to{" "}
-                {Math.min(indexOfLastRow, doctorsData.length)} of{" "}
-                {doctorsData.length} entries
-              </div>
-              <div className="flex space-x-1">
-                <button
-                  onClick={() => paginate(1)}
-                  disabled={currentPage === 1}
-                  className={`px-3 py-1 rounded font-bold ${
-                    currentPage === 1
-                      ? "bg-gray-200 text-gray-500 cursor-not-allowed"
-                      : "bg-blue-50 text-blue-600 hover:bg-blue-100"
-                  }`}
-                >
-                  First
-                </button>
-                <button
-                  onClick={() => paginate(currentPage - 1)}
-                  disabled={currentPage === 1}
-                  className={`px-3 py-1 rounded font-bold ${
-                    currentPage === 1
-                      ? "bg-gray-200 text-gray-500 cursor-not-allowed"
-                      : "bg-blue-50 text-blue-600 hover:bg-blue-100"
-                  }`}
-                >
-                  Previous
-                </button>
-
-                {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-                  let pageNum;
-                  if (totalPages <= 5) {
-                    pageNum = i + 1;
-                  } else if (currentPage <= 3) {
-                    pageNum = i + 1;
-                  } else if (currentPage >= totalPages - 2) {
-                    pageNum = totalPages - 4 + i;
-                  } else {
-                    pageNum = currentPage - 2 + i;
-                  }
-
-                  return (
-                    <button
-                      key={pageNum}
-                      onClick={() => paginate(pageNum)}
-                      className={`px-3 py-1 rounded font-bold ${
-                        currentPage === pageNum
-                          ? "bg-blue-600 text-white"
-                          : "bg-blue-50 text-blue-600 hover:bg-blue-100"
-                      }`}
-                    >
-                      {pageNum}
-                    </button>
-                  );
-                })}
-
-                <button
-                  onClick={() => paginate(currentPage + 1)}
-                  disabled={currentPage === totalPages}
-                  className={`px-3 py-1 rounded font-bold ${
-                    currentPage === totalPages
-                      ? "bg-gray-200 text-gray-500 cursor-not-allowed"
-                      : "bg-blue-50 text-blue-600 hover:bg-blue-100"
-                  }`}
-                >
-                  Next
-                </button>
-                <button
-                  onClick={() => paginate(totalPages)}
-                  disabled={currentPage === totalPages}
-                  className={`px-3 py-1 rounded font-bold ${
-                    currentPage === totalPages
-                      ? "bg-gray-200 text-gray-500 cursor-not-allowed"
-                      : "bg-blue-50 text-blue-600 hover:bg-blue-100"
-                  }`}
-                >
-                  Last
-                </button>
-              </div>
-            </div> */}
           </div>
         </div>
-      )}
-    </div>
+      )
+      }
+    </div >
   );
 };
 
@@ -3129,16 +2743,16 @@ const ImageTemplateForm = ({ onSubmit, onCancel }) => {
         color: "#000000",
       },
     },
-brandAreaSettings: {
-  enabled: false,
-  x: 50,
-  y: 400,
-  width: 700,
-  height: 150,
-  slots: [
-    {id: 1, x: 0, y: 0, width: 100, height: 60},
-  ],
-},
+    brandAreaSettings: {
+      enabled: false,
+      x: 50,
+      y: 400,
+      width: 700,
+      height: 150,
+      slots: [
+        { id: 1, x: 0, y: 0, width: 100, height: 60 },
+      ],
+    },
   });
 
   const [previewImage, setPreviewImage] = useState(null);
@@ -3299,35 +2913,35 @@ brandAreaSettings: {
   };
 
   const updateBrandAreaSetting = (setting, value) => {
-  console.log(`Updating brand area ${setting} to:`, value);
+    console.log(`Updating brand area ${setting} to:`, value);
 
-  let processedValue = value;
-  if (setting === "x" || setting === "y" || setting === "width" || setting === "height" || setting === "brandWidth" || setting === "brandHeight") {
-    processedValue = parseInt(value) || 0;
-  }
-
-  const newFormData = {
-    ...formData,
-    brandAreaSettings: {
-      ...formData.brandAreaSettings,
-      [setting]: processedValue,
-    },
-  };
-
-  setFormData(newFormData);
-  if (window.livePreviewWindow && !window.livePreviewWindow.closed) {
-    try {
-      window.livePreviewWindow.updatePositions(
-        newFormData.textPositions,
-        newFormData.customText,
-        newFormData.imageSettings,
-        newFormData.brandAreaSettings // ADD THIS PARAMETER
-      );
-    } catch (error) {
-      console.warn("Failed to update live preview:", error);
+    let processedValue = value;
+    if (setting === "x" || setting === "y" || setting === "width" || setting === "height" || setting === "brandWidth" || setting === "brandHeight") {
+      processedValue = parseInt(value) || 0;
     }
-  }
-};
+
+    const newFormData = {
+      ...formData,
+      brandAreaSettings: {
+        ...formData.brandAreaSettings,
+        [setting]: processedValue,
+      },
+    };
+
+    setFormData(newFormData);
+    if (window.livePreviewWindow && !window.livePreviewWindow.closed) {
+      try {
+        window.livePreviewWindow.updatePositions(
+          newFormData.textPositions,
+          newFormData.customText,
+          newFormData.imageSettings,
+          newFormData.brandAreaSettings // ADD THIS PARAMETER
+        );
+      } catch (error) {
+        console.warn("Failed to update live preview:", error);
+      }
+    }
+  };
 
   //Add this function to receive updates from the live preview window
   //Add this function to receive updates from the live preview window
@@ -3357,17 +2971,17 @@ brandAreaSettings: {
   };
 
   window.updateBrandAreaPositionFromPreview = (x, y) => {
-  setFormData((prev) => ({
-    ...prev,
-    brandAreaSettings: {
-      ...prev.brandAreaSettings,
-      x: x,
-      y: y,
-    },
-  }));
-};
+    setFormData((prev) => ({
+      ...prev,
+      brandAreaSettings: {
+        ...prev.brandAreaSettings,
+        x: x,
+        y: y,
+      },
+    }));
+  };
 
-window.updateSlotPositionFromPreview = (slotId, x, y) => {
+  window.updateSlotPositionFromPreview = (slotId, x, y) => {
     setFormData((prev) => {
       const newSlots = [...(prev.brandAreaSettings.slots || [])];
       const slotIndex = newSlots.findIndex(slot => slot.id === slotId);
@@ -3423,31 +3037,31 @@ window.updateSlotPositionFromPreview = (slotId, x, y) => {
 
     // Prepare final payload
     // Prepare final payload including brand data
-const finalFormData = {
-  ...formData,
-  textPositions: {
-    ...formData.textPositions,
-    customText: {
-      ...formData.textPositions.customText,
-      text: formData.customText,
-    },
-  },
-  imageSettings: formData.imageSettings,
-  brandAreaSettings: formData.brandAreaSettings,
-};
+    const finalFormData = {
+      ...formData,
+      textPositions: {
+        ...formData.textPositions,
+        customText: {
+          ...formData.textPositions.customText,
+          text: formData.customText,
+        },
+      },
+      imageSettings: formData.imageSettings,
+      brandAreaSettings: formData.brandAreaSettings,
+    };
 
     try {
       console.log("Submitting template with custom text:", finalFormData);
 
       // Step 1: Create the template
       await onSubmit(finalFormData);
-      
+
       toast.success("Template and brand positions saved successfully");
     } catch (err) {
       console.error("Error during submission:", err);
       toast.error("Failed to save template or brand positions");
     }
-    };
+  };
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
@@ -3509,140 +3123,140 @@ const finalFormData = {
         </div>
 
         {/* Font & Color Controls */}
-{/* Font & Color Controls */}
-<div className="grid grid-cols-3 gap-3">
-  {/* Font Size */}
-  <div>
-    <label className="text-xs text-gray-600 mb-1 block">
-      Font Size
-    </label>
-    <input
-      type="range"
-      min="20"
-      max="80"
-      value={formData.textPositions.customText?.fontSize || 48}
-      onChange={(e) =>
-        updatePosition("customText", "fontSize", e.target.value)
-      }
-      className="w-full"
-    />
-    <span className="text-xs text-gray-500">
-      {formData.textPositions.customText?.fontSize || 48}px
-    </span>
-  </div>
+        {/* Font & Color Controls */}
+        <div className="grid grid-cols-3 gap-3">
+          {/* Font Size */}
+          <div>
+            <label className="text-xs text-gray-600 mb-1 block">
+              Font Size
+            </label>
+            <input
+              type="range"
+              min="20"
+              max="80"
+              value={formData.textPositions.customText?.fontSize || 48}
+              onChange={(e) =>
+                updatePosition("customText", "fontSize", e.target.value)
+              }
+              className="w-full"
+            />
+            <span className="text-xs text-gray-500">
+              {formData.textPositions.customText?.fontSize || 48}px
+            </span>
+          </div>
 
-  {/* Text Color */}
-  <div>
-    <label className="text-xs text-gray-600 mb-1 block">
-      Text Color
-    </label>
-    <div className="flex items-center space-x-2">
-      <input
-        type="color"
-        value={formData.textPositions.customText?.color || "#0000ff"}
-        onChange={(e) => {
-          console.log("Color changed to:", e.target.value);
-          updatePosition("customText", "color", e.target.value);
-        }}
-        className="w-8 h-8 rounded border border-gray-300"
-      />
-      <input
-        type="text"
-        value={formData.textPositions.customText?.color || "#0000ff"}
-        onChange={(e) =>
-          updatePosition("customText", "color", e.target.value)
-        }
-        className="flex-1 px-2 py-1 text-xs border border-gray-300 rounded"
-        placeholder="#0000ff"
-      />
-    </div>
-  </div>
+          {/* Text Color */}
+          <div>
+            <label className="text-xs text-gray-600 mb-1 block">
+              Text Color
+            </label>
+            <div className="flex items-center space-x-2">
+              <input
+                type="color"
+                value={formData.textPositions.customText?.color || "#0000ff"}
+                onChange={(e) => {
+                  console.log("Color changed to:", e.target.value);
+                  updatePosition("customText", "color", e.target.value);
+                }}
+                className="w-8 h-8 rounded border border-gray-300"
+              />
+              <input
+                type="text"
+                value={formData.textPositions.customText?.color || "#0000ff"}
+                onChange={(e) =>
+                  updatePosition("customText", "color", e.target.value)
+                }
+                className="flex-1 px-2 py-1 text-xs border border-gray-300 rounded"
+                placeholder="#0000ff"
+              />
+            </div>
+          </div>
 
-  {/* Font Family */}
-  <div>
-    <label className="text-xs text-gray-600 mb-1 block">
-      Font Family
-    </label>
-    <select
-      value={formData.textPositions.customText?.fontFamily || "Arial"}
-      onChange={(e) => {
-        console.log("Font changed to:", e.target.value);
-        updatePosition("customText", "fontFamily", e.target.value);
-      }}
-      className="w-full px-2 py-1 text-xs border border-gray-300 rounded"
-    >
-      <option value="Arial">Arial</option>
-<option value="Times New Roman">Times New Roman</option>
-<option value="Helvetica">Helvetica</option>
-<option value="Georgia">Georgia</option>
-<option value="Verdana">Verdana</option>
-<option value="Impact">Impact</option>
-<option value="Comic Sans MS">Comic Sans MS</option>
-<option value="Dancing Script">Dancing Script (Cursive)</option>
-<option value="Great Vibes">Great Vibes (Elegant Cursive)</option>
-<option value="Pacifico">Pacifico (Bold Cursive)</option>
-<option value="Allura">Allura (Script)</option>
-<option value="Alex Brush">Alex Brush (Handwritten)</option>
-    </select>
-  </div>
+          {/* Font Family */}
+          <div>
+            <label className="text-xs text-gray-600 mb-1 block">
+              Font Family
+            </label>
+            <select
+              value={formData.textPositions.customText?.fontFamily || "Arial"}
+              onChange={(e) => {
+                console.log("Font changed to:", e.target.value);
+                updatePosition("customText", "fontFamily", e.target.value);
+              }}
+              className="w-full px-2 py-1 text-xs border border-gray-300 rounded"
+            >
+              <option value="Arial">Arial</option>
+              <option value="Times New Roman">Times New Roman</option>
+              <option value="Helvetica">Helvetica</option>
+              <option value="Georgia">Georgia</option>
+              <option value="Verdana">Verdana</option>
+              <option value="Impact">Impact</option>
+              <option value="Comic Sans MS">Comic Sans MS</option>
+              <option value="Dancing Script">Dancing Script (Cursive)</option>
+              <option value="Great Vibes">Great Vibes (Elegant Cursive)</option>
+              <option value="Pacifico">Pacifico (Bold Cursive)</option>
+              <option value="Allura">Allura (Script)</option>
+              <option value="Alex Brush">Alex Brush (Handwritten)</option>
+            </select>
+          </div>
 
-  {/* Font Weight */}
-  <div>
-    <label className="text-xs text-gray-600 mb-1 block">
-      Font Weight
-    </label>
-    <select
-      value={formData.textPositions.customText?.fontWeight || "bold"}
-      onChange={(e) =>
-        updatePosition("customText", "fontWeight", e.target.value)
-      }
-      className="w-full px-2 py-1 text-xs border border-gray-300 rounded"
-    >
-      <option value="normal">Normal</option>
-      <option value="bold">Bold</option>
-      <option value="600">Semi Bold</option>
-      <option value="800">Extra Bold</option>
-    </select>
-  </div>
+          {/* Font Weight */}
+          <div>
+            <label className="text-xs text-gray-600 mb-1 block">
+              Font Weight
+            </label>
+            <select
+              value={formData.textPositions.customText?.fontWeight || "bold"}
+              onChange={(e) =>
+                updatePosition("customText", "fontWeight", e.target.value)
+              }
+              className="w-full px-2 py-1 text-xs border border-gray-300 rounded"
+            >
+              <option value="normal">Normal</option>
+              <option value="bold">Bold</option>
+              <option value="600">Semi Bold</option>
+              <option value="800">Extra Bold</option>
+            </select>
+          </div>
 
-  {/* Font Style (Italic/Cursive) */}
-  <div>
-    <label className="text-xs text-gray-600 mb-1 block">
-      Font Style
-    </label>
-    <select
-      value={formData.textPositions.customText?.fontStyle || "normal"}
-      onChange={(e) =>
-        updatePosition("customText", "fontStyle", e.target.value)
-      }
-      className="w-full px-2 py-1 text-xs border border-gray-300 rounded"
-    >
-      <option value="normal">Normal</option>
-      <option value="italic">Italic</option>
-      <option value="oblique">Oblique</option>
-    </select>
-  </div>
+          {/* Font Style (Italic/Cursive) */}
+          <div>
+            <label className="text-xs text-gray-600 mb-1 block">
+              Font Style
+            </label>
+            <select
+              value={formData.textPositions.customText?.fontStyle || "normal"}
+              onChange={(e) =>
+                updatePosition("customText", "fontStyle", e.target.value)
+              }
+              className="w-full px-2 py-1 text-xs border border-gray-300 rounded"
+            >
+              <option value="normal">Normal</option>
+              <option value="italic">Italic</option>
+              <option value="oblique">Oblique</option>
+            </select>
+          </div>
 
-  {/* Text Shadow */}
-  <div>
-    <label className="text-xs text-gray-600 mb-1 block">
-      Text Shadow
-    </label>
-    <select
-      value={formData.textPositions.customText?.textShadow || "none"}
-      onChange={(e) =>
-        updatePosition("customText", "textShadow", e.target.value)
-      }
-      className="w-full px-2 py-1 text-xs border border-gray-300 rounded"
-    >
-      <option value="none">None</option>
-      <option value="1px 1px 2px rgba(0,0,0,0.5)">Light Shadow</option>
-      <option value="2px 2px 4px rgba(0,0,0,0.7)">Medium Shadow</option>
-      <option value="3px 3px 6px rgba(0,0,0,0.9)">Heavy Shadow</option>
-    </select>
-  </div>
-</div>
-</div>
+          {/* Text Shadow */}
+          <div>
+            <label className="text-xs text-gray-600 mb-1 block">
+              Text Shadow
+            </label>
+            <select
+              value={formData.textPositions.customText?.textShadow || "none"}
+              onChange={(e) =>
+                updatePosition("customText", "textShadow", e.target.value)
+              }
+              className="w-full px-2 py-1 text-xs border border-gray-300 rounded"
+            >
+              <option value="none">None</option>
+              <option value="1px 1px 2px rgba(0,0,0,0.5)">Light Shadow</option>
+              <option value="2px 2px 4px rgba(0,0,0,0.7)">Medium Shadow</option>
+              <option value="3px 3px 6px rgba(0,0,0,0.9)">Heavy Shadow</option>
+            </select>
+          </div>
+        </div>
+      </div>
 
       {/* Doctor Image Settings */}
       <div className="space-y-3 p-4 bg-green-50 border border-green-200 rounded-lg">
@@ -3922,315 +3536,315 @@ const finalFormData = {
               {/* Advanced Controls */}
               {/* Advanced Controls */}
               {/* Advanced Controls */}
-<div className="grid grid-cols-4 gap-2">
-  <div>
-    <label className="text-xs text-gray-600">Font</label>
-    <select
-      value={
-        formData.textPositions[fieldName]?.fontFamily || "Arial"
-      }
-      onChange={(e) =>
-        updatePosition(fieldName, "fontFamily", e.target.value)
-      }
-      className="w-full px-2 py-1 text-xs border border-gray-300 rounded"
-    >
-<option value="Arial">Arial</option>
-<option value="Times New Roman">Times New Roman</option>
-<option value="Helvetica">Helvetica</option>
-<option value="Georgia">Georgia</option>
-<option value="Verdana">Verdana</option>
-<option value="Impact">Impact</option>
-<option value="Comic Sans MS">Comic Sans MS</option>
-<option value="Dancing Script">Dancing Script (Cursive)</option>
-<option value="Great Vibes">Great Vibes (Elegant Cursive)</option>
-<option value="Pacifico">Pacifico (Bold Cursive)</option>
-<option value="Allura">Allura (Script)</option>
-<option value="Alex Brush">Alex Brush (Handwritten)</option>
-    </select>
-  </div>
-  <div>
-    <label className="text-xs text-gray-600">Weight</label>
-    <select
-      value={
-        formData.textPositions[fieldName]?.fontWeight || "normal"
-      }
-      onChange={(e) =>
-        updatePosition(fieldName, "fontWeight", e.target.value)
-      }
-      className="w-full px-2 py-1 text-xs border border-gray-300 rounded"
-    >
-      <option value="normal">Normal</option>
-      <option value="bold">Bold</option>
-      <option value="600">Semi Bold</option>
-    </select>
-  </div>
-  <div>
-    <label className="text-xs text-gray-600">Style</label>
-    <select
-      value={
-        formData.textPositions[fieldName]?.fontStyle || "normal"
-      }
-      onChange={(e) =>
-        updatePosition(fieldName, "fontStyle", e.target.value)
-      }
-      className="w-full px-2 py-1 text-xs border border-gray-300 rounded"
-    >
-      <option value="normal">Normal</option>
-      <option value="italic">Italic</option>
-      <option value="oblique">Oblique</option>
-    </select>
-  </div>
-  <div>
-    <label className="text-xs text-gray-600">Shadow</label>
-    <select
-      value={
-        formData.textPositions[fieldName]?.textShadow || "none"
-      }
-      onChange={(e) =>
-        updatePosition(fieldName, "textShadow", e.target.value)
-      }
-      className="w-full px-2 py-1 text-xs border border-gray-300 rounded"
-    >
-      <option value="none">None</option>
-      <option value="1px 1px 2px rgba(0,0,0,0.5)">Light</option>
-      <option value="2px 2px 4px rgba(0,0,0,0.7)">Medium</option>
-    </select>
-  </div>
-</div>
+              <div className="grid grid-cols-4 gap-2">
+                <div>
+                  <label className="text-xs text-gray-600">Font</label>
+                  <select
+                    value={
+                      formData.textPositions[fieldName]?.fontFamily || "Arial"
+                    }
+                    onChange={(e) =>
+                      updatePosition(fieldName, "fontFamily", e.target.value)
+                    }
+                    className="w-full px-2 py-1 text-xs border border-gray-300 rounded"
+                  >
+                    <option value="Arial">Arial</option>
+                    <option value="Times New Roman">Times New Roman</option>
+                    <option value="Helvetica">Helvetica</option>
+                    <option value="Georgia">Georgia</option>
+                    <option value="Verdana">Verdana</option>
+                    <option value="Impact">Impact</option>
+                    <option value="Comic Sans MS">Comic Sans MS</option>
+                    <option value="Dancing Script">Dancing Script (Cursive)</option>
+                    <option value="Great Vibes">Great Vibes (Elegant Cursive)</option>
+                    <option value="Pacifico">Pacifico (Bold Cursive)</option>
+                    <option value="Allura">Allura (Script)</option>
+                    <option value="Alex Brush">Alex Brush (Handwritten)</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="text-xs text-gray-600">Weight</label>
+                  <select
+                    value={
+                      formData.textPositions[fieldName]?.fontWeight || "normal"
+                    }
+                    onChange={(e) =>
+                      updatePosition(fieldName, "fontWeight", e.target.value)
+                    }
+                    className="w-full px-2 py-1 text-xs border border-gray-300 rounded"
+                  >
+                    <option value="normal">Normal</option>
+                    <option value="bold">Bold</option>
+                    <option value="600">Semi Bold</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="text-xs text-gray-600">Style</label>
+                  <select
+                    value={
+                      formData.textPositions[fieldName]?.fontStyle || "normal"
+                    }
+                    onChange={(e) =>
+                      updatePosition(fieldName, "fontStyle", e.target.value)
+                    }
+                    className="w-full px-2 py-1 text-xs border border-gray-300 rounded"
+                  >
+                    <option value="normal">Normal</option>
+                    <option value="italic">Italic</option>
+                    <option value="oblique">Oblique</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="text-xs text-gray-600">Shadow</label>
+                  <select
+                    value={
+                      formData.textPositions[fieldName]?.textShadow || "none"
+                    }
+                    onChange={(e) =>
+                      updatePosition(fieldName, "textShadow", e.target.value)
+                    }
+                    className="w-full px-2 py-1 text-xs border border-gray-300 rounded"
+                  >
+                    <option value="none">None</option>
+                    <option value="1px 1px 2px rgba(0,0,0,0.5)">Light</option>
+                    <option value="2px 2px 4px rgba(0,0,0,0.7)">Medium</option>
+                  </select>
+                </div>
+              </div>
             </div>
           ))}
           {/* Brand Area Settings */}
-<div className="space-y-3 p-4 bg-purple-50 border border-purple-200 rounded-lg">
-  <div className="flex items-center justify-between">
-    <label className="block text-sm font-medium text-purple-700 mb-2">
-      Brand Area Settings
-    </label>
-    <label className="flex items-center">
-      <input
-        type="checkbox"
-        checked={formData.brandAreaSettings?.enabled || false}
-        onChange={(e) => {
-          const newFormData = {
-            ...formData,
-            brandAreaSettings: {
-              ...formData.brandAreaSettings,
-              enabled: e.target.checked,
-            },
-          };
-          setFormData(newFormData);
-        }}
-        className="mr-2"
-      />
-      <span className="text-sm text-purple-700 font-medium">
-        Enable Brand Area
-      </span>
-    </label>
-  </div>
+          <div className="space-y-3 p-4 bg-purple-50 border border-purple-200 rounded-lg">
+            <div className="flex items-center justify-between">
+              <label className="block text-sm font-medium text-purple-700 mb-2">
+                Brand Area Settings
+              </label>
+              <label className="flex items-center">
+                <input
+                  type="checkbox"
+                  checked={formData.brandAreaSettings?.enabled || false}
+                  onChange={(e) => {
+                    const newFormData = {
+                      ...formData,
+                      brandAreaSettings: {
+                        ...formData.brandAreaSettings,
+                        enabled: e.target.checked,
+                      },
+                    };
+                    setFormData(newFormData);
+                  }}
+                  className="mr-2"
+                />
+                <span className="text-sm text-purple-700 font-medium">
+                  Enable Brand Area
+                </span>
+              </label>
+            </div>
 
-  {formData.brandAreaSettings?.enabled && (
-    <>
-      <div className="grid grid-cols-2 gap-3">
-        <div>
-          <label className="text-xs text-gray-600 mb-1 block">
-            Area X Position
-          </label>
-          <input
-            type="number"
-            min="0"
-            value={formData.brandAreaSettings.x || 50}
-            onChange={(e) => updateBrandAreaSetting("x", e.target.value)}
-            className="w-full px-2 py-1 border border-gray-300 rounded text-xs"
-          />
-        </div>
-        <div>
-          <label className="text-xs text-gray-600 mb-1 block">
-            Area Y Position
-          </label>
-          <input
-            type="number"
-            min="0"
-            value={formData.brandAreaSettings.y || 400}
-            onChange={(e) => updateBrandAreaSetting("y", e.target.value)}
-            className="w-full px-2 py-1 border border-gray-300 rounded text-xs"
-          />
-        </div>
-      </div>
+            {formData.brandAreaSettings?.enabled && (
+              <>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-xs text-gray-600 mb-1 block">
+                      Area X Position
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      value={formData.brandAreaSettings.x || 50}
+                      onChange={(e) => updateBrandAreaSetting("x", e.target.value)}
+                      className="w-full px-2 py-1 border border-gray-300 rounded text-xs"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs text-gray-600 mb-1 block">
+                      Area Y Position
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      value={formData.brandAreaSettings.y || 400}
+                      onChange={(e) => updateBrandAreaSetting("y", e.target.value)}
+                      className="w-full px-2 py-1 border border-gray-300 rounded text-xs"
+                    />
+                  </div>
+                </div>
 
-      <div className="grid grid-cols-2 gap-3">
-        <div>
-          <label className="text-xs text-gray-600 mb-1 block">
-            Area Width
-          </label>
-          <input
-            type="number"
-            min="100"
-            value={formData.brandAreaSettings.width || 700}
-            onChange={(e) => updateBrandAreaSetting("width", e.target.value)}
-            className="w-full px-2 py-1 border border-gray-300 rounded text-xs"
-          />
-        </div>
-        <div>
-          <label className="text-xs text-gray-600 mb-1 block">
-            Area Height
-          </label>
-          <input
-            type="number"
-            min="50"
-            value={formData.brandAreaSettings.height || 150}
-            onChange={(e) => updateBrandAreaSetting("height", e.target.value)}
-            className="w-full px-2 py-1 border border-gray-300 rounded text-xs"
-          />
-        </div>
-      </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-xs text-gray-600 mb-1 block">
+                      Area Width
+                    </label>
+                    <input
+                      type="number"
+                      min="100"
+                      value={formData.brandAreaSettings.width || 700}
+                      onChange={(e) => updateBrandAreaSetting("width", e.target.value)}
+                      className="w-full px-2 py-1 border border-gray-300 rounded text-xs"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs text-gray-600 mb-1 block">
+                      Area Height
+                    </label>
+                    <input
+                      type="number"
+                      min="50"
+                      value={formData.brandAreaSettings.height || 150}
+                      onChange={(e) => updateBrandAreaSetting("height", e.target.value)}
+                      className="w-full px-2 py-1 border border-gray-300 rounded text-xs"
+                    />
+                  </div>
+                </div>
 
-{/* Brand Slots Management */}
-<div className="space-y-3">
-  <div className="flex justify-between items-center">
-    <label className="text-xs text-gray-600 font-medium">Brand Slots</label>
-    <button
-      type="button"
-      onClick={() => {
-        const newSlots = [...(formData.brandAreaSettings.slots || [])];
-        const newId = newSlots.length + 1;
-        newSlots.push({
-          id: newId,
-          x: 0,
-          y: newSlots.length * 70,
-          width: 100,
-          height: 60
-        });
-        setFormData(prev => ({
-          ...prev,
-          brandAreaSettings: {
-            ...prev.brandAreaSettings,
-            slots: newSlots
-          }
-        }));
-      }}
-      className="px-2 py-1 bg-green-500 text-white text-xs rounded hover:bg-green-600"
-    >
-      + Add Slot
-    </button>
-  </div>
+                {/* Brand Slots Management */}
+                <div className="space-y-3">
+                  <div className="flex justify-between items-center">
+                    <label className="text-xs text-gray-600 font-medium">Brand Slots</label>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const newSlots = [...(formData.brandAreaSettings.slots || [])];
+                        const newId = newSlots.length + 1;
+                        newSlots.push({
+                          id: newId,
+                          x: 0,
+                          y: newSlots.length * 70,
+                          width: 100,
+                          height: 60
+                        });
+                        setFormData(prev => ({
+                          ...prev,
+                          brandAreaSettings: {
+                            ...prev.brandAreaSettings,
+                            slots: newSlots
+                          }
+                        }));
+                      }}
+                      className="px-2 py-1 bg-green-500 text-white text-xs rounded hover:bg-green-600"
+                    >
+                      + Add Slot
+                    </button>
+                  </div>
 
-  {(formData.brandAreaSettings.slots || []).map((slot, index) => (
-    <div key={slot.id} className="p-3 border border-gray-200 rounded-lg bg-gray-50">
-      <div className="flex justify-between items-center mb-2">
-        <span className="text-xs font-medium text-gray-700">Slot {slot.id}</span>
-        {formData.brandAreaSettings.slots.length > 1 && (
-          <button
-            type="button"
-            onClick={() => {
-              const newSlots = formData.brandAreaSettings.slots.filter(s => s.id !== slot.id);
-              setFormData(prev => ({
-                ...prev,
-                brandAreaSettings: {
-                  ...prev.brandAreaSettings,
-                  slots: newSlots
-                }
-              }));
-            }}
-            className="px-2 py-1 bg-red-500 text-white text-xs rounded hover:bg-red-600"
-          >
-            Remove
-          </button>
-        )}
-      </div>
-      
-      <div className="grid grid-cols-2 gap-2">
-        <div>
-          <label className="text-xs text-gray-600">X Position</label>
-          <input
-            type="number"
-            min="0"
-            value={slot.x}
-            onChange={(e) => {
-              const newSlots = [...formData.brandAreaSettings.slots];
-              newSlots[index] = {...slot, x: parseInt(e.target.value)};
-              setFormData(prev => ({
-                ...prev,
-                brandAreaSettings: {
-                  ...prev.brandAreaSettings,
-                  slots: newSlots
-                }
-              }));
-            }}
-            className="w-full px-2 py-1 border border-gray-300 rounded text-xs"
-          />
-        </div>
-        <div>
-          <label className="text-xs text-gray-600">Y Position</label>
-          <input
-            type="number"
-            min="0"
-            value={slot.y}
-            onChange={(e) => {
-              const newSlots = [...formData.brandAreaSettings.slots];
-              newSlots[index] = {...slot, y: parseInt(e.target.value)};
-              setFormData(prev => ({
-                ...prev,
-                brandAreaSettings: {
-                  ...prev.brandAreaSettings,
-                  slots: newSlots
-                }
-              }));
-            }}
-            className="w-full px-2 py-1 border border-gray-300 rounded text-xs"
-          />
-        </div>
-        <div>
-          <label className="text-xs text-gray-600">Width</label>
-          <input
-            type="number"
-            min="50"
-            max="300"
-            value={slot.width}
-            onChange={(e) => {
-              const newSlots = [...formData.brandAreaSettings.slots];
-              newSlots[index] = {...slot, width: parseInt(e.target.value)};
-              setFormData(prev => ({
-                ...prev,
-                brandAreaSettings: {
-                  ...prev.brandAreaSettings,
-                  slots: newSlots
-                }
-              }));
-            }}
-            className="w-full px-2 py-1 border border-gray-300 rounded text-xs"
-          />
-        </div>
-        <div>
-          <label className="text-xs text-gray-600">Height</label>
-          <input
-            type="number"
-            min="30"
-            max="200"
-            value={slot.height}
-            onChange={(e) => {
-              const newSlots = [...formData.brandAreaSettings.slots];
-              newSlots[index] = {...slot, height: parseInt(e.target.value)};
-              setFormData(prev => ({
-                ...prev,
-                brandAreaSettings: {
-                  ...prev.brandAreaSettings,
-                  slots: newSlots
-                }
-              }));
-            }}
-            className="w-full px-2 py-1 border border-gray-300 rounded text-xs"
-          />
-        </div>
-      </div>
-    </div>
-  ))}
+                  {(formData.brandAreaSettings.slots || []).map((slot, index) => (
+                    <div key={slot.id} className="p-3 border border-gray-200 rounded-lg bg-gray-50">
+                      <div className="flex justify-between items-center mb-2">
+                        <span className="text-xs font-medium text-gray-700">Slot {slot.id}</span>
+                        {formData.brandAreaSettings.slots.length > 1 && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const newSlots = formData.brandAreaSettings.slots.filter(s => s.id !== slot.id);
+                              setFormData(prev => ({
+                                ...prev,
+                                brandAreaSettings: {
+                                  ...prev.brandAreaSettings,
+                                  slots: newSlots
+                                }
+                              }));
+                            }}
+                            className="px-2 py-1 bg-red-500 text-white text-xs rounded hover:bg-red-600"
+                          >
+                            Remove
+                          </button>
+                        )}
+                      </div>
 
-  <div className="text-xs text-gray-500 p-2 bg-gray-100 rounded">
-    Total Slots: {(formData.brandAreaSettings.slots || []).length} | Brands will fill slots in order and auto-center when fewer brands selected
-  </div>
-</div>
-    </>
-  )}
-</div>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="text-xs text-gray-600">X Position</label>
+                          <input
+                            type="number"
+                            min="0"
+                            value={slot.x}
+                            onChange={(e) => {
+                              const newSlots = [...formData.brandAreaSettings.slots];
+                              newSlots[index] = { ...slot, x: parseInt(e.target.value) };
+                              setFormData(prev => ({
+                                ...prev,
+                                brandAreaSettings: {
+                                  ...prev.brandAreaSettings,
+                                  slots: newSlots
+                                }
+                              }));
+                            }}
+                            className="w-full px-2 py-1 border border-gray-300 rounded text-xs"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-xs text-gray-600">Y Position</label>
+                          <input
+                            type="number"
+                            min="0"
+                            value={slot.y}
+                            onChange={(e) => {
+                              const newSlots = [...formData.brandAreaSettings.slots];
+                              newSlots[index] = { ...slot, y: parseInt(e.target.value) };
+                              setFormData(prev => ({
+                                ...prev,
+                                brandAreaSettings: {
+                                  ...prev.brandAreaSettings,
+                                  slots: newSlots
+                                }
+                              }));
+                            }}
+                            className="w-full px-2 py-1 border border-gray-300 rounded text-xs"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-xs text-gray-600">Width</label>
+                          <input
+                            type="number"
+                            min="50"
+                            max="300"
+                            value={slot.width}
+                            onChange={(e) => {
+                              const newSlots = [...formData.brandAreaSettings.slots];
+                              newSlots[index] = { ...slot, width: parseInt(e.target.value) };
+                              setFormData(prev => ({
+                                ...prev,
+                                brandAreaSettings: {
+                                  ...prev.brandAreaSettings,
+                                  slots: newSlots
+                                }
+                              }));
+                            }}
+                            className="w-full px-2 py-1 border border-gray-300 rounded text-xs"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-xs text-gray-600">Height</label>
+                          <input
+                            type="number"
+                            min="30"
+                            max="200"
+                            value={slot.height}
+                            onChange={(e) => {
+                              const newSlots = [...formData.brandAreaSettings.slots];
+                              newSlots[index] = { ...slot, height: parseInt(e.target.value) };
+                              setFormData(prev => ({
+                                ...prev,
+                                brandAreaSettings: {
+                                  ...prev.brandAreaSettings,
+                                  slots: newSlots
+                                }
+                              }));
+                            }}
+                            className="w-full px-2 py-1 border border-gray-300 rounded text-xs"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+
+                  <div className="text-xs text-gray-500 p-2 bg-gray-100 rounded">
+                    Total Slots: {(formData.brandAreaSettings.slots || []).length} | Brands will fill slots in order and auto-center when fewer brands selected
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
         </div>
       </div>
       {/* Custom Text Position */}
@@ -4850,145 +4464,145 @@ setSyncStatus('🔄 Live Update', '#2563eb');
 </html>`);
               livePreviewWindow.document.close();
 
-             function injectDraggableLogos(previewWindow, brandData) {
-               const container =
-                 previewWindow.document.getElementById("canvas");
-               if (!container) {
-                 console.warn("Logo container not found in preview window.");
-                 return;
-               }
+              function injectDraggableLogos(previewWindow, brandData) {
+                const container =
+                  previewWindow.document.getElementById("canvas");
+                if (!container) {
+                  console.warn("Logo container not found in preview window.");
+                  return;
+                }
 
-               brandData.forEach((brand) => {
-                 const existingWrapper = previewWindow.document.getElementById(
-                   `brand-${brand.id}`
-                 );
-                 if (existingWrapper) {
-                   // Update position and size if already injected
-                   existingWrapper.style.left = (brand.position?.x ?? 0) + "px";
-                   existingWrapper.style.top = (brand.position?.y ?? 0) + "px";
-                   existingWrapper.style.width =
-                     (brand.position?.width ?? 100) + "px";
-                   existingWrapper.style.height =
-                     (brand.position?.height ?? 100) + "px";
-                   return; // Skip re-injection
-                 }
+                brandData.forEach((brand) => {
+                  const existingWrapper = previewWindow.document.getElementById(
+                    `brand-${brand.id}`
+                  );
+                  if (existingWrapper) {
+                    // Update position and size if already injected
+                    existingWrapper.style.left = (brand.position?.x ?? 0) + "px";
+                    existingWrapper.style.top = (brand.position?.y ?? 0) + "px";
+                    existingWrapper.style.width =
+                      (brand.position?.width ?? 100) + "px";
+                    existingWrapper.style.height =
+                      (brand.position?.height ?? 100) + "px";
+                    return; // Skip re-injection
+                  }
 
-                 const wrapper = previewWindow.document.createElement("div");
-                 wrapper.style.position = "absolute";
-                 wrapper.style.left = (brand.position?.x ?? 0) + "px";
-                 wrapper.style.top = (brand.position?.y ?? 0) + "px";
-                 wrapper.style.width = (brand.position?.width ?? 100) + "px";
-                 wrapper.style.height = (brand.position?.height ?? 100) + "px";
-                 wrapper.style.cursor = "move";
-                 wrapper.style.border = "1px dashed #ccc";
-                 wrapper.style.boxSizing = "border-box";
-                 wrapper.id = `brand-${brand.id}`;
+                  const wrapper = previewWindow.document.createElement("div");
+                  wrapper.style.position = "absolute";
+                  wrapper.style.left = (brand.position?.x ?? 0) + "px";
+                  wrapper.style.top = (brand.position?.y ?? 0) + "px";
+                  wrapper.style.width = (brand.position?.width ?? 100) + "px";
+                  wrapper.style.height = (brand.position?.height ?? 100) + "px";
+                  wrapper.style.cursor = "move";
+                  wrapper.style.border = "1px dashed #ccc";
+                  wrapper.style.boxSizing = "border-box";
+                  wrapper.id = `brand-${brand.id}`;
 
-                 const logo = previewWindow.document.createElement("img");
-                 logo.src = brand.imageUrl;
-                 logo.alt = `Logo for brand ${brand.id}`;
-                 logo.style.width = "100%";
-                 logo.style.height = "100%";
-                 logo.style.objectFit = brand.position?.fit || "contain";
-                 logo.style.pointerEvents = "none";
+                  const logo = previewWindow.document.createElement("img");
+                  logo.src = brand.imageUrl;
+                  logo.alt = `Logo for brand ${brand.id}`;
+                  logo.style.width = "100%";
+                  logo.style.height = "100%";
+                  logo.style.objectFit = brand.position?.fit || "contain";
+                  logo.style.pointerEvents = "none";
 
-                 const resizeHandle =
-                   previewWindow.document.createElement("div");
-                 resizeHandle.style.position = "absolute";
-                 resizeHandle.style.width = "10px";
-                 resizeHandle.style.height = "10px";
-                 resizeHandle.style.right = "0";
-                 resizeHandle.style.bottom = "0";
-                 resizeHandle.style.cursor = "nwse-resize";
-                 resizeHandle.style.background = "#000";
+                  const resizeHandle =
+                    previewWindow.document.createElement("div");
+                  resizeHandle.style.position = "absolute";
+                  resizeHandle.style.width = "10px";
+                  resizeHandle.style.height = "10px";
+                  resizeHandle.style.right = "0";
+                  resizeHandle.style.bottom = "0";
+                  resizeHandle.style.cursor = "nwse-resize";
+                  resizeHandle.style.background = "#000";
 
-                 wrapper.appendChild(logo);
-                 wrapper.appendChild(resizeHandle);
-                 container.appendChild(wrapper);
+                  wrapper.appendChild(logo);
+                  wrapper.appendChild(resizeHandle);
+                  container.appendChild(wrapper);
 
-                 // 🖱️ Drag logic
-                 let isDragging = false;
-                 let offsetX = 0;
-                 let offsetY = 0;
+                  // 🖱️ Drag logic
+                  let isDragging = false;
+                  let offsetX = 0;
+                  let offsetY = 0;
 
-                 wrapper.addEventListener("mousedown", (e) => {
-                   if (e.target === resizeHandle) return;
-                   isDragging = true;
-                   offsetX = e.clientX - wrapper.offsetLeft;
-                   offsetY = e.clientY - wrapper.offsetTop;
-                   previewWindow.document.body.style.userSelect = "none";
-                 });
+                  wrapper.addEventListener("mousedown", (e) => {
+                    if (e.target === resizeHandle) return;
+                    isDragging = true;
+                    offsetX = e.clientX - wrapper.offsetLeft;
+                    offsetY = e.clientY - wrapper.offsetTop;
+                    previewWindow.document.body.style.userSelect = "none";
+                  });
 
-                 previewWindow.document.addEventListener("mousemove", (e) => {
-                   if (isDragging) {
-                     wrapper.style.left = e.clientX - offsetX + "px";
-                     wrapper.style.top = e.clientY - offsetY + "px";
-                   } else if (isResizing) {
-                     const newWidth = startWidth + (e.clientX - startX);
-                     const newHeight = startHeight + (e.clientY - startY);
-                     wrapper.style.width = newWidth + "px";
-                     wrapper.style.height = newHeight + "px";
-                   }
-                 });
+                  previewWindow.document.addEventListener("mousemove", (e) => {
+                    if (isDragging) {
+                      wrapper.style.left = e.clientX - offsetX + "px";
+                      wrapper.style.top = e.clientY - offsetY + "px";
+                    } else if (isResizing) {
+                      const newWidth = startWidth + (e.clientX - startX);
+                      const newHeight = startHeight + (e.clientY - startY);
+                      wrapper.style.width = newWidth + "px";
+                      wrapper.style.height = newHeight + "px";
+                    }
+                  });
 
-                 previewWindow.document.addEventListener("mouseup", () => {
-                   if (isDragging) {
-                     isDragging = false;
-                     previewWindow.document.body.style.userSelect = "auto";
+                  previewWindow.document.addEventListener("mouseup", () => {
+                    if (isDragging) {
+                      isDragging = false;
+                      previewWindow.document.body.style.userSelect = "auto";
 
-                     const finalX = parseInt(wrapper.style.left, 10);
-                     const finalY = parseInt(wrapper.style.top, 10);
+                      const finalX = parseInt(wrapper.style.left, 10);
+                      const finalY = parseInt(wrapper.style.top, 10);
 
-                     if (previewWindow.opener && !previewWindow.opener.closed) {
-                       try {
-                         previewWindow.opener.syncBrandPositionFromPreview(
-                           brand.id,
-                           finalX,
-                           finalY
-                         );
-                       } catch (err) {
-                         console.warn(
-                           "Failed to sync position to parent:",
-                           err
-                         );
-                       }
-                     }
-                   }
+                      if (previewWindow.opener && !previewWindow.opener.closed) {
+                        try {
+                          previewWindow.opener.syncBrandPositionFromPreview(
+                            brand.id,
+                            finalX,
+                            finalY
+                          );
+                        } catch (err) {
+                          console.warn(
+                            "Failed to sync position to parent:",
+                            err
+                          );
+                        }
+                      }
+                    }
 
-                   if (isResizing) {
-                     isResizing = false;
+                    if (isResizing) {
+                      isResizing = false;
 
-                     const finalWidth = parseInt(wrapper.style.width, 10);
-                     const finalHeight = parseInt(wrapper.style.height, 10);
+                      const finalWidth = parseInt(wrapper.style.width, 10);
+                      const finalHeight = parseInt(wrapper.style.height, 10);
 
-                     if (previewWindow.opener && !previewWindow.opener.closed) {
-                       try {
-                         previewWindow.opener.syncBrandSizeFromPreview(
-                           brand.id,
-                           finalWidth,
-                           finalHeight
-                         );
-                       } catch (err) {
-                         console.warn("Failed to sync size to parent:", err);
-                       }
-                     }
-                   }
-                 });
+                      if (previewWindow.opener && !previewWindow.opener.closed) {
+                        try {
+                          previewWindow.opener.syncBrandSizeFromPreview(
+                            brand.id,
+                            finalWidth,
+                            finalHeight
+                          );
+                        } catch (err) {
+                          console.warn("Failed to sync size to parent:", err);
+                        }
+                      }
+                    }
+                  });
 
-                 // 🖱️ Resize logic
-                 let isResizing = false;
-                 let startWidth, startHeight, startX, startY;
+                  // 🖱️ Resize logic
+                  let isResizing = false;
+                  let startWidth, startHeight, startX, startY;
 
-                 resizeHandle.addEventListener("mousedown", (e) => {
-                   e.stopPropagation();
-                   isResizing = true;
-                   startWidth = wrapper.offsetWidth;
-                   startHeight = wrapper.offsetHeight;
-                   startX = e.clientX;
-                   startY = e.clientY;
-                 });
-               });
-             }
+                  resizeHandle.addEventListener("mousedown", (e) => {
+                    e.stopPropagation();
+                    isResizing = true;
+                    startWidth = wrapper.offsetWidth;
+                    startHeight = wrapper.offsetHeight;
+                    startX = e.clientX;
+                    startY = e.clientY;
+                  });
+                });
+              }
               // // ✅ Call after preview window is ready
               // setTimeout(() => {
               //   injectDraggableLogos(livePreviewWindow, brandData);
