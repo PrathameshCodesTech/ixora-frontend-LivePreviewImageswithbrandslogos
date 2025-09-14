@@ -3,9 +3,27 @@ import {
   setItemInLocalStorage,
   getItemInLocalStorage,
 } from "../utils/loacalStorage";
+import toast from "react-hot-toast";
 
 // const BASE_URL = `https://api.videomaker.digielvestech.in`;
-const BASE_URL = `http://localhost:8000`;
+const BASE_URL = window.location.hostname === 'localhost' 
+  ? 'http://localhost:8000' 
+  : 'https://api.videomaker.digielvestech.in';
+
+// Global axios error handler
+axios.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response?.status === 429) {
+      toast.error("Too many requests. Please wait a moment and try again.");
+    } else if (error.response?.status === 500) {
+      toast.error("Server error. Please try again later.");
+    } else if (!error.response) {
+      toast.error("Network error. Please check your connection.");
+    }
+    return Promise.reject(error);
+  }
+);
 
 export const employeelogin = async (data) => {
   try {
@@ -47,7 +65,11 @@ export const employeeCreation = async (data) => {
 };
 
 export const getAllDoctors = async (page = 1, search = '', specialization = '') => {
-  const params = new URLSearchParams({ page: page.toString() });
+  const params = new URLSearchParams({ 
+    page: page.toString(),
+    user_type: 'Admin',  // Ensure admin access
+    employee_id: getItemInLocalStorage('UserId')?.replace(/"/g, '') || ''
+  });
   if (search) params.append('search', search);
   if (specialization) params.append('specialization', specialization);
   
@@ -116,16 +138,31 @@ export const createBulkEmployee = async (FormData) => {
 };
 
 export const getAllDoctorsVideosByEmployee = async (empId, page = 1, search = '', specialization = '') => {
-  const params = new URLSearchParams({ 
+  const params = new URLSearchParams({
     page: page.toString(),
-    employee_id: empId 
+    employee_id: empId,
+    user_type: getItemInLocalStorage('UserType')?.replace(/"/g, '') || 'Employee'  // Add user type
   });
   if (search) params.append('search', search);
   if (specialization) params.append('specialization', specialization);
   
-  const response = await axios.get(`${BASE_URL}/api/doctors-by-employee/?${params}`);
-  return response.data;
+  const token = getAuthToken();
+  
+  try {
+    const response = await axios.get(`${BASE_URL}/api/doctors-by-employee/?${params}`, {
+      headers: {
+        'Authorization': token ? `Bearer ${token}` : undefined,
+        'Content-Type': 'application/json'
+      }
+    });
+    return response.data;
+  } catch (error) {
+    console.error('Error fetching doctors by employee:', error.response?.data || error.message);
+    throw error;
+  }
 };
+
+
 export const CreateEmployee = async (data) => {
   try {
     const response = await axios.post(`${BASE_URL}/api/employees/`, data);
@@ -348,13 +385,15 @@ export const getTemplatesDetails = async (templateType = 'video', params = {}) =
 
 export const getTemplatesDetailsById = async (id) => {
   try {
-    const response = await axios.get(`${BASE_URL}/api/video-templates/${id}`);
+    // First try to get it as an image template since that's what you're using
+    const response = await axios.get(`${BASE_URL}/api/image-templates/${id}/`);
     return response.data;
   } catch (error) {
-    console.log("Error getting template ", error);
+    console.log("Error getting image template ", error);
     throw error;
   }
 };
+
 export const editTemplatesDetailsById = async (id, data) => {
   try {
     const response = await axios.patch(
@@ -484,13 +523,20 @@ export const getGeneratedDoctorImages = async (doctorId) => {
   }
 };
 
-export const updateDoctor = async (doctorId, formData) => {
-  let token = localStorage.getItem('Access_Token');
+const getAuthToken = () => {
+  let token = localStorage.getItem('Access_Token') || 
+              localStorage.getItem('access_token') || 
+              localStorage.getItem('access');
   if (token) {
     token = token.replace(/"/g, ''); // Remove quotes
   }
+  return token;
+};
+
+export const updateDoctor = async (doctorId, formData) => {
+  const token = getAuthToken();
   
-  const response = await axios.patch(`${BASE_URL}/api/doctors/${doctorId}/`, formData, {
+  const response = await axios.patch(`${BASE_URL}/api/doctor/${doctorId}/`, formData, {
     headers: { 
       'Authorization': `Bearer ${token}`,
       'Content-Type': 'multipart/form-data' 
@@ -499,18 +545,44 @@ export const updateDoctor = async (doctorId, formData) => {
   return response.data;
 };
 
-export const deleteDoctor = async (doctorId) => {
-  let token = localStorage.getItem('Access_Token');
-  if (token) {
-    token = token.replace(/"/g, ''); // Remove quotes
-  }
-  
-  const response = await axios.delete(`${BASE_URL}/api/doctors/${doctorId}/`, {
-    headers: {
-      'Authorization': `Bearer ${token}`
+export const deleteDoctor = async (doctorId, params = {}) => {
+  console.log("DELETE URL:", `${BASE_URL}/api/doctors/${doctorId}/`);
+  console.log("Params:", params);
+  try {
+    const token = getItemInLocalStorage("Access_Token")?.replace(/"/g, "");
+    
+    if (!token) {
+      throw new Error("Authentication token not found");
     }
-  });
-  return response.data;
+
+    const response = await axios.delete(`${BASE_URL}/api/doctor/${doctorId}/`, {
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      params: params
+    });
+
+    return response.data;
+  } catch (error) {
+    console.error("Delete API error:", error);
+    
+    // Handle axios error response
+    if (error.response) {
+      const status = error.response.status;
+      if (status === 403) {
+        throw new Error("You don't have permission to delete this doctor");
+      } else if (status === 404) {
+        throw new Error("Doctor not found");
+      } else if (status === 405) {
+        throw new Error("Delete method not allowed on this endpoint");
+      } else {
+        throw new Error(error.response.data?.error || 'Failed to delete doctor');
+      }
+    }
+    
+    throw error;
+  }
 };
 
 export const deleteContent = async (contentType, contentId) => {
@@ -528,12 +600,7 @@ export const deleteContent = async (contentType, contentId) => {
 };
 
 export const regenerateContent = async (data) => {
-  let token = localStorage.getItem('Access_Token');
-  
-  // CLEAN THE TOKEN - Remove quotes if they exist
-  if (token) {
-    token = token.replace(/"/g, ''); // Remove all quotes
-  }
+  const token = getAuthToken();
   
   console.log("🔍 Cleaned token:", token ? "EXISTS" : "NOT FOUND");
   console.log("🔍 Token preview:", token?.substring(0, 20) + "...");
@@ -584,3 +651,16 @@ export const getImageTemplateUsage = async () => {
     throw error;
   }
 };
+
+export const getTaskStatus = async (taskId) => {
+  try {
+    const response = await axios.get(`${BASE_URL}/api/task-status/${taskId}/`);
+    return response.data;
+  } catch (error) {
+    console.log("Error getting task status", error);
+    throw error;
+  }
+};
+
+
+

@@ -11,6 +11,7 @@ import {
   getImageTemplates,
   getTemplatesDetailsById,
   getAllBrands, // ADD THIS
+  getTaskStatus,
 } from "../api";
 import logo from "../assets/ixoralogo.png";
 import profile from "../assets/blank.jpg";
@@ -22,6 +23,9 @@ import {
   getItemInLocalStorage,
 } from "../utils/loacalStorage";
 import toast from "react-hot-toast";
+import { useCallback } from "react";
+
+
 
 
 //! DONE - auto-populated
@@ -237,19 +241,26 @@ const Profile = () => {
       valid = false;
     }
     // Only require photo for video templates
-// Only require photo for video templates (images are optional)
-if (selectedTemplateType === "video" && profileImage === profile) {
-  toast.error("Profile image is required for video templates");
-  newErrors.profileImage = "Profile image is required for video templates";
-  valid = false;
-}
 // For image templates, photos are optional - no validation needed
 
     setErrors(newErrors);
     return valid;
   };
 
-  const handleMobileNumberChange = async (mobileNumber) => {
+  // Add debounce utility
+  const debounce = (func, wait) => {
+    let timeout;
+    return function executedFunction(...args) {
+      const later = () => {
+        clearTimeout(timeout);
+        func(...args);
+      };
+      clearTimeout(timeout);
+      timeout = setTimeout(later, wait);
+    };
+  };
+
+  const handleMobileNumberChange = debounce(async (mobileNumber) => {
     // Clear previous messages
     setDoctorFoundMessage("");
 
@@ -290,7 +301,7 @@ if (selectedTemplateType === "video" && profileImage === profile) {
     } else if (mobileNumber.length < 10) {
       setIsSearchingDoctor(false);
     }
-  };
+  }, 1000);
 
 
 
@@ -302,101 +313,33 @@ if (selectedTemplateType === "video" && profileImage === profile) {
     setApiError("");
 
     try {
-      const formDataToSend = new FormData();
+      // Image generation process
+      toast.loading("Loading template details...", { id: "template-fetch" });
 
-      // DEBUG: Check what's in formData before sending
-console.log("🔍 FormData before sending:", formData);
-console.log("🔍 Doctor name:", formData.doctorName);
-console.log("🔍 Hospital/clinic:", formData.hospital);
-console.log("🔍 City:", formData.city);
-console.log("🔍 State:", formData.state);
-console.log("🔍 Specialization:", formData.specialization);
-console.log("🔍 Specialization key:", formData.specialization_key);
+      if (!formData.template) {
+        toast.error("Please select a template first");
+        return; 
+      }  
 
-      // Add all required fields
-      formDataToSend.append("employee", ID);
-      formDataToSend.append("name", formData.doctorName);
-      formDataToSend.append("designation", "Doctor");
-      formDataToSend.append("clinic", formData.hospital);
-      formDataToSend.append("city", formData.city);
-      formDataToSend.append("specialization_key", formData.specialization_key);
-      formDataToSend.append("specialization", formData.specialization);
-      formDataToSend.append("mobile_number", formData.mobileNumber);
-      formDataToSend.append("whatsapp_number", formData.whatsappNumber);
-      formDataToSend.append("description", formData.description);
-      formDataToSend.append("state", formData.state);
-      formDataToSend.append("template_id", formData.template);
+      const templateDetails = await getTemplatesDetailsById(formData.template); 
+      if (!templateDetails) {   
+        toast.error("Selected template not found. Please choose another template.");   
+        return; 
+      }
 
-      // Add employee ID if user is an employee
-// Always add employee - both Admin and Employee can create doctors
-if (ID) {
-  formDataToSend.append("employee", ID); // Keep using database ID for video since it works
-}
-// Add image for video templates (required) and image templates (optional)
-if (profileImage !== profile) {
-  const blob = await fetch(profileImage).then((r) => r.blob());
-  formDataToSend.append("image", blob, "profile.jpg");
-} else if (selectedTemplateType === "image") {
-  // For image templates without uploaded photo, you might want to send a flag
-  console.log("🔍 Image template without custom photo - using template default");
-}
-      let response;
-      if (selectedTemplateType === "video") {
-  console.log("🔍 Submitting VIDEO template with FormData:");
-  
-  // Debug FormData contents
-  for (let [key, value] of formDataToSend.entries()) {
-    console.log(`🔍 FormData ${key}:`, value);
-  }
-  
-  toast.loading("Creating doctor video...", { id: "create-video" });
-  console.log("🔍 SENDING FormData to API:");
-for (let [key, value] of formDataToSend.entries()) {
-  console.log(`🔍 ${key}:`, value);
-}
-
-try {
-  response = await doctorVideoGeneration(formDataToSend);
-  console.log("🔍 API Response:", response);
-} catch (error) {
-  console.error("🔍 API Error:", error);
-  console.error("🔍 Error Response:", error.response?.data);
-  console.error("🔍 Error Status:", error.response?.status);
-  throw error;
-}
-  
-  console.log("🔍 Video generation response:", response);
-console.log("🔍 Response has ID?", response?.id);
-console.log("🔍 Response has output_video?", response?.output_video);
-console.log("🔍 Response keys:", Object.keys(response || {}));
-
-if (response && response.id) {
-  toast.success("Video created successfully!", { id: "create-video" });
-  navigate("/gallery", { state: { createdContent: response, contentType: "video" } });
-} else {
-  toast.error("Video creation failed - no ID returned", { id: "create-video" });
-  console.error("Video response missing ID:", response);
-  console.error("Full response details:", JSON.stringify(response, null, 2));
-}
-} else {
-        // For image templates, first get template details
-        toast.loading("Loading template details...", { id: "template-fetch" });
-
-        try {
-          const templateDetails = await getTemplatesDetailsById(formData.template);
-          console.log("🔍 Template Details Fetched:", templateDetails);
-          console.log("🔍 Custom Text from Template:", templateDetails.custom_text);
-          console.log("🔍 Text Positions:", templateDetails.text_positions);
-          console.log("🔍 Template Brand Area Settings:", templateDetails.brand_area_settings); // ADD 
-          toast.dismiss("template-fetch");
-
+      console.log("🔍 Template Details Fetched:", templateDetails);
+      console.log("🔍 Custom Text from Template:", templateDetails.custom_text);
+      console.log("🔍 Text Positions:", templateDetails.text_positions);
+      console.log("🔍 Template Brand Area Settings:", templateDetails.brand_area_settings);
+      toast.dismiss("template-fetch");
           // Use template's custom_text and positioning
           // For image templates, use different API
 const imageData = {
   template_id: formData.template,
   mobile: formData.mobileNumber,
   name: formData.doctorName,
-  selected_brands: selectedBrands, // ADD THIS
+  selected_brands: selectedBrands,
+  employee_id: getItemInLocalStorage("UserId")?.replace(/"/g, ''), // Always send employee_id
   content_data: {
     message: templateDetails.custom_text || "",
     custom_text: templateDetails.custom_text || "",
@@ -405,7 +348,7 @@ const imageData = {
     doctor_clinic: formData.hospital,
     doctor_city: formData.city,
     doctor_state: formData.state,
-    selected_brands: selectedBrands // ADD THIS TOO
+    selected_brands: selectedBrands
   },
   doctor_data: {
     name: formData.doctorName,
@@ -417,16 +360,14 @@ const imageData = {
   }
 };
 
-if (USERTYPE === "Employee" && EMPLOYEE_ID) {
-  imageData.employee_id = EMPLOYEE_ID; // Use string ID instead of database ID
-}
+console.log("🔍 Sending employee_id:", imageData.employee_id); // Debug log
 
 console.log("🔍 Sending image data with template details:", imageData);
 console.log("🔍 Doctor data being sent:", imageData.doctor_data);
 console.log("🔍 Clinic in doctor_data:", imageData.doctor_data.clinic);
 console.log("🔍 City in doctor_data:", imageData.doctor_data.city);
 
-response = await generateImageContent(imageData);
+const response = await generateImageContent(imageData);
 console.log("🔍 =====IMAGE CREATION DEBUG=====");
 
 console.log("🔍 IMAGE CREATION RESPONSE:", response);
@@ -434,38 +375,63 @@ console.log("🔍 Image response keys:", Object.keys(response || {}));
 console.log("🔍 Image response doctor_info:", response.doctor_info);
 console.log("🔍 Image response output_image_url:", response.output_image_url);
 console.log("🔍 ================================");
-          navigate("/gallery", { state: { createdContent: response, contentType: "image" } });
 
-        } catch (templateError) {
-          toast.error("Failed to load templateee details", { id: "template-fetch" });
-          console.error("Template fetch error:", templateError);
-          return;
-        }
+// Handle async image processing
+if (response.status === "processing" && response.task_id) {
+  toast.loading("Processing image...", { id: "image-processing" });
+  
+  // Poll for task completion
+  const pollTaskStatus = async (taskId) => {
+    try {
+      const statusData = await getTaskStatus(taskId);
+      
+      if (statusData.status === "completed") {
+        toast.success("Image created successfully!", { id: "image-processing" });
+        navigate("/gallery", { state: { createdContent: statusData.result, contentType: "image" } });
+      } else if (statusData.status === "failed") {
+        toast.error("Image creation failed", { id: "image-processing" });
+      } else {
+        // Still processing, poll again after 2 seconds
+        setTimeout(() => pollTaskStatus(taskId), 2000);
       }
     } catch (error) {
-      console.error("API Error:", error);
-      setApiError(
-        error.response?.data?.message ||
-        "Failed to generate video. Please try again."
-      );
-    } finally {
-      setIsSubmitting(false);
+      toast.error("Error checking image status", { id: "image-processing" });
     }
+  };
+  
+  pollTaskStatus(response.task_id);
+} else {
+  // Handle immediate response (fallback)
+  navigate("/gallery", { state: { createdContent: response, contentType: "image" } });
+}
+
+    } catch (error) {
+  console.error("API Error:", error);
+  
+  let errorMessage = "Content creation failed. Please try again.";
+  
+  if (error.response?.status === 429) {
+    errorMessage = "Too many requests. Please wait before trying again.";
+  } else if (error.response?.status === 413) {
+    errorMessage = "File too large. Please use a smaller image.";
+  } else if (error.response?.data?.message) {
+    errorMessage = error.response.data.message;
+  } else if (!error.response) {
+    errorMessage = "Network error. Please check your connection.";
+  }
+  
+  setApiError(errorMessage);
+  toast.error(errorMessage);
+} finally {
+  setIsSubmitting(false);
+}
   };
   const [templates, setTemplates] = useState([]);
   const [selectedTemplate, setSelectedTemplate] = useState("");
   const [isLoading, setIsLoading] = useState(true);
 
 
-  const fetchTemplates = async () => {
-    try {
-      const response = await getTemplatesDetails();
-      setTemplates(response);
-    } catch (error) {
-      console.error("Error fetching templates:", error);
-      toast.error("Failed to load templates");
-    }
-  };
+
   const [templateList, setTemplatesList] = useState([]);
 
   const [selectedTemplateType, setSelectedTemplateType] = useState(
@@ -480,11 +446,17 @@ const [selectedBrands, setSelectedBrands] = useState([]);
 
   const fetchTemplatesList = async () => {
     try {
-      // Fetch both video and image templates
-      const videoRes = await getVideoTemplates();
+      // Add user context to template requests
+      const userParams = {
+        user_type: USERTYPE,
+        employee_id: EMPLOYEE_ID?.replace(/"/g, "")
+      };
+
+      // Fetch both video and image templates with user context
+      const videoRes = await getVideoTemplates(userParams);
       console.log("Video templates:", videoRes);
 
-      const imageRes = await getImageTemplates();
+      const imageRes = await getImageTemplates(userParams);
       console.log("Image templates:", imageRes);
 
       // Combine both arrays and ensure template_type is set
@@ -507,18 +479,6 @@ const [selectedBrands, setSelectedBrands] = useState([]);
     }
 
     return selectedTemplate.text_positions;
-  };
-  const checkImageTemplates = async () => {
-    try {
-      console.log("Checking image templates...");
-      const imageTemplates = await getImageTemplates();
-      console.log("Direct image templates fetch:", imageTemplates);
-
-      const imageTemplatesViaUnified = await getTemplatesDetails('image');
-      console.log("Image templates via unified endpoint:", imageTemplatesViaUnified);
-    } catch (error) {
-      console.error("Error checking image templates:", error);
-    }
   };
 
   const fetchBrandCategories = async () => {
@@ -547,12 +507,11 @@ useEffect(() => {
   const initializeData = async () => {
     try {
       setIsLoading(true);
-      await Promise.allSettled([
-        fetchTemplates(),
-        fetchTemplatesList(),
-        checkImageTemplates(),
-        fetchBrandCategories() // ADD THIS LINE
-      ]);
+      // Only fetch what's needed, with delays between calls
+      await fetchTemplatesList();
+      await new Promise(resolve => setTimeout(resolve, 200));
+      await fetchBrandCategories();
+      // Remove checkImageTemplates() - it's redundant
     } catch (error) {
       console.error("Error initializing data:", error);
       toast.error("Failed to load templates");
@@ -562,6 +521,14 @@ useEffect(() => {
   };
 
   initializeData();
+  
+  // Cleanup function
+  return () => {
+    // Clear any pending polling timeouts
+    if (window.taskPollingTimeout) {
+      clearTimeout(window.taskPollingTimeout);
+    }
+  };
 }, []);
 
   if (isLoading) {
@@ -578,14 +545,15 @@ useEffect(() => {
   return (
     <div>
       <div className="flex flex-col md:flex-row min-h-screen bg-white">
-        {/* Left - Form */}
-        <div className="flex-1 px-10 py-10">
-          <h2 className="text-2xl font-bold mb-6 mt-10">Basic Information</h2>
+        {/* Left - Centered Form */}
+        <div className="flex-1 px-10 py-10 flex flex-col items-center justify-center">
+          <div className="w-full max-w-4xl">
+            <h2 className="text-2xl font-bold mb-6 text-center">Basic Information</h2>
 
-          <form
-            className="space-y-4 max-w-2xl mt-15 md:ml-10"
-            onSubmit={handleSubmit}
-          >
+            <form
+              className="space-y-4 w-full"
+              onSubmit={handleSubmit}
+            >
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end mt-5 mb-8">
               <div>
                 <label className="block mb-1 font-bold text-xl">
@@ -914,23 +882,26 @@ useEffect(() => {
               </div>
             </div>
 
-            {/* Mobile & WhatsApp */}
-            <div>
-              <label className="block font-bold text-xl mb-2">
-                Doctor Full Name
-              </label>
-              <input
-                type="text"
-                name="doctorName"
-                placeholder="Enter full name"
-                className={`w-full border ${errors.specialization_key ? "border-red-500" : "border-gray-300"
-                  } rounded-md px-4 py-2 mb-1`}
-                value={formData.doctorName}
-                onChange={handleInputChange}
-              />
-              {errors.doctorName && (
-                <p className="text-red-500 text-sm">{errors.doctorName}</p>
-              )}
+{/* Doctor Name */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block font-bold text-xl mb-2">
+                  Doctor Full Name
+                </label>
+                <input
+                  type="text"
+                  name="doctorName"
+                  placeholder="Enter full name"
+                  className={`w-full border ${errors.specialization_key ? "border-red-500" : "border-gray-300"
+                    } rounded-md px-4 py-2 mb-1`}
+                  value={formData.doctorName}
+                  onChange={handleInputChange}
+                />
+                {errors.doctorName && (
+                  <p className="text-red-500 text-sm">{errors.doctorName}</p>
+                )}
+              </div>
+              <div></div> {/* Empty div to take up the second column */}
             </div>
 
             {/* Description */}
@@ -967,123 +938,38 @@ useEffect(() => {
             {apiError && <div className="text-red-500 mt-2">{apiError}</div>}
           </form>
         </div>
+        </div>
 
-        {/* Right - Profile and Template */}
-        <div className="bg-blue-100 w-full md:w-[30%] px-6 py-10 flex flex-col items-center">
+        {/* Right - Centered Content */}
+        <div className="bg-blue-100 w-full md:w-[30%] px-6 py-10 flex flex-col items-center justify-center">
           <img
             src={logo}
             alt="Logo"
-            className="w-auto h-15 object-cover mb-8 hidden sm:block"
+            className="w-auto h-15 object-cover mb-8"
           />
-
-          <div className="relative mb-6 w-70 h-70">
-           {showCropper ? (
-  <div className="relative w-full h-full">
-    <Cropper
-      image={originalImage}
-      crop={crop}
-      zoom={zoom}
-      aspect={1}
-      onCropChange={setCrop}
-      onCropComplete={onCropComplete}
-      onZoomChange={setZoom}
-    />
-    <div className="absolute bottom-4 right-4 flex gap-2">
-      <button
-        onClick={() => setShowCropper(false)}
-        className="bg-gray-500 text-white px-4 py-2 rounded"
-      >
-        Cancel
-      </button>
-      <button
-        onClick={getCroppedImg}
-        className="bg-blue-500 text-white px-4 py-2 rounded"
-      >
-        Upload
-      </button>
-    </div>
-  </div>
-) : (
-  <>
-    <img
-      src={profileImage}
-      alt="Doctor"
-      className={`w-full h-full object-cover border-8 ${
-        selectedTemplateType === "video" 
-          ? "border-blue-900" 
-          : "border-green-600"
-      }`}
-    />
-    <div
-      className={`absolute -bottom-2 -right-4 rounded-full p-5 cursor-pointer ${
-        selectedTemplateType === "video"
-          ? "bg-blue-200 hover:bg-blue-300"
-          : "bg-green-200 hover:bg-green-300"
-      }`}
-      onClick={triggerFileInput}
-    >
-      <FaUpload className="w-11 h-11" />
-    </div>
-    <input
-      type="file"
-      ref={fileInputRef}
-      onChange={handleFileChange}
-      accept="image/*"
-      className="hidden"
-    />
-    {/* Template Type Indicator */}
-    <div className={`absolute top-2 left-2 px-2 py-1 rounded text-xs font-bold text-white ${
-      selectedTemplateType === "video" ? "bg-blue-600" : "bg-green-600"
-    }`}>
-      {selectedTemplateType === "video" ? "📹 Video" : "🖼️ Image"}
-      {selectedTemplateType === "image" && <span className="text-xs block">Photo Optional</span>}
-    </div>
-  </>
-)}
-{errors.profileImage && (
-  <p className="text-red-500 text-sm text-center font-bold mb-4">
-    {errors.profileImage}
-  </p>
-)}
+          
+          <div className={`px-6 py-3 rounded-lg text-lg font-bold text-white mb-6 ${
+            selectedTemplateType === "video" ? "bg-blue-600" : "bg-green-600"
+          }`}>
+            {selectedTemplateType === "video" ? "Video Template" : "Image Template"}
           </div>
 
-          {/* <div className="w-full mb-4">
-            <label className="text-sm  mb-1 block text-center font-bold">
-              Select Video Template
-            </label>
-            <select
-              className="w-full border border-gray-300 rounded-md px-4 py-2"
-              value={selectedTemplate}
-              onChange={(e) => setSelectedTemplate(e.target.value)}
-            >
-              <option value="">Choose Template</option>
-              {templates.map((template) => (
-                <option key={template.id} value={template.id}>
-                  {template.name}
-                </option>
-              ))}
-            </select>
-          </div> */}
-
-          <div className={`bg-white border p-3 rounded-md text-xs space-y-1 ${
-  selectedTemplateType === "video" 
-    ? "border-red-300 text-red-600" 
-    : "border-green-300 text-green-600"
-}`}>
-  <div className="font-bold mb-1">
-    {selectedTemplateType === "video" ? "📹 Video Template Rules:" : "🖼️ Image Template Rules:"}
-  </div>
-  <p>1. For better quality size should be width=515px, height=515px*</p>
-  <p>2. Max File Size should be 500KB for greeting and JPG*</p>
-  {selectedTemplateType === "video" ? (
-    <p>3. Video processing will take up to 60 minutes or more depending on video rendering.*</p>
-  ) : (
-    <>
-      <p>3. Photo upload is optional for image templates*</p>
-      <p>4. Image processing typically takes 1-2 minutes*</p>
-    </>
-  )}
-</div>
+          <div className={`bg-white border p-4 rounded-md text-sm space-y-2 max-w-sm ${
+            selectedTemplateType === "video" 
+              ? "border-red-300 text-red-600" 
+              : "border-green-300 text-green-600"
+          }`}>
+            <div className="font-bold mb-2">
+              {selectedTemplateType === "video" ? "Video Template Rules:" : "Image Template Rules:"}
+            </div>
+            <p>1. Fill in all required information</p>
+            <p>2. Select appropriate template</p>
+            {selectedTemplateType === "video" ? (
+              <p>3. Video processing takes up to 60 minutes*</p>
+            ) : (
+              <p>3. Image processing takes 1-2 minutes*</p>
+            )}
+          </div>
         </div>
       </div>
     </div>

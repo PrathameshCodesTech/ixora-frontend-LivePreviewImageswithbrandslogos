@@ -27,7 +27,8 @@ import {
   regenerateContent, // ADD
   deleteContent, // ADD
   getAllBrands,
-  postBrandPosition
+  postBrandPosition,
+  getTaskStatus,
 } from "../api";
 import logo from "../assets/ixoralogo.png";
 import doctors from "../assets/doctors.png";
@@ -53,17 +54,20 @@ function getAbsoluteImageUrl(url) {
 }
 
 const Gallery = () => {
+  // Debug function for delete issues - ADD THIS RIGHT AFTER COMPONENT START
+  const debugDeleteOperation = (doctor) => {
+    console.log("=== DELETE DEBUG ===");
+    console.log("Employee ID:", getItemInLocalStorage("UserId"));
+    console.log("Access Token exists:", !!getItemInLocalStorage("Access_Token"));
+    console.log("Selected Doctor:", doctor);
+    console.log("User Type:", getItemInLocalStorage("UserType"));
+    console.log("==================");
+  };
+
   useEffect(() => {
-    // DEBUG: Check all possible token locations
-    console.log("🔍 =====TOKEN DEBUG=====");
-    console.log("🔍 access_token:", localStorage.getItem("access_token"));
-    console.log("🔍 access:", localStorage.getItem("access"));
-    console.log("🔍 token:", localStorage.getItem("token"));
-    console.log("🔍 authToken:", localStorage.getItem("authToken"));
-    console.log("🔍 All localStorage keys:", Object.keys(localStorage));
-    console.log("🔍 UserId:", getItemInLocalStorage("UserId"));
-    console.log("🔍 UserType:", getItemInLocalStorage("UserType"));
-    console.log("🔍 ======================");
+    // Debug token availability
+    console.log("Token debug:");
+    // ... existing useEffect code
   }, []);
   const [viewMode, setViewMode] = useState("table");
   const [doctorsData, setDoctorsData] = useState([]);
@@ -145,10 +149,13 @@ const [page, setPage] = useState(1);
 
   const itemsPerPage = 10;
   const totalPages = Math.ceil(count / itemsPerPage);
-  const fetchDoctorsData = async () => {
+const fetchDoctorsData = async (signal) => {
   try {
     setLoading(true);
     let response;
+
+    // Check if request was aborted
+    if (signal?.aborted) return;
 
     // Build query parameters
     const params = new URLSearchParams();
@@ -165,6 +172,9 @@ const [page, setPage] = useState(1);
     } else {
       response = await getAllDoctorsVideosByEmployee(EMPID, page, searchTerm, selectedSpecialization);
     }
+
+    // Check again before setting state
+    if (signal?.aborted) return;
 
       // ADD THIS DEBUG FOR IMAGE REGENERATION:
       console.log("🔍 =====IMAGE REGENERATION DEBUG=====");
@@ -249,12 +259,17 @@ const [page, setPage] = useState(1);
   };
 
   useEffect(() => {
-    const delayedSearch = setTimeout(() => {
-      fetchDoctorsData();
-    }, 500); // Debounce search by 500ms
+  const controller = new AbortController();
+  
+  const delayedSearch = setTimeout(() => {
+    fetchDoctorsData(controller.signal);
+  }, 500);
 
-    return () => clearTimeout(delayedSearch);
-  }, [searchTerm, selectedSpecialization, page, USERTYPE, EMPID]);
+  return () => {
+    clearTimeout(delayedSearch);
+    controller.abort();
+  };
+}, [searchTerm, selectedSpecialization, page, USERTYPE, EMPID]);
 
   const handleNextPage = () => {
     if (nextPageUrl) setPage((prev) => prev + 1);
@@ -391,12 +406,16 @@ const currentRows = doctorsData || [];
     setTemplateType("image"); // Set to image mode
   };
 
-  const handleRecreateImage = async () => {
-    if (!selectedTemplate) {
-      return toast.error("Please select image template");
-    }
-    try {
-      toast.loading("Loading template details...", { id: "template-load" });
+const [isRegeneratingImage, setIsRegeneratingImage] = useState(false);
+
+const handleRecreateImage = async () => {
+  if (!selectedTemplate) {
+    return toast.error("Please select image template");
+  }
+  
+  setIsRegeneratingImage(true);
+  try {
+    toast.loading("Loading template details...", { id: "template-load" });
       const templateDetails = await getTemplatesDetailsById(selectedTemplate);
       toast.dismiss("template-load");
 
@@ -442,21 +461,42 @@ const currentRows = doctorsData || [];
         !!uploadedDoctorImage
       );
 
-      toast.loading("Creating image...", { id: "recreate-image" });
-      const response = await generateImageContent(formData);
-      setIsRecreateImageModalOpen(false);
-      setUploadedDoctorImage(null); // Reset after use
-      fetchDoctorsData();
+const response = await generateImageContent(formData);
+setIsRecreateImageModalOpen(false);
+setUploadedDoctorImage(null); // Reset after use
 
-      if (response && response.output_image_url) {
+// Handle async image processing
+if (response.status === "processing" && response.task_id) {
+  const pollTaskStatus = async (taskId) => {
+    try {
+      const statusData = await getTaskStatus(taskId);
+      
+      if (statusData.status === "completed") {
         toast.success("Image created successfully!", { id: "recreate-image" });
+        fetchDoctorsData();
+      } else if (statusData.status === "failed") {
+        toast.error("Image creation failed", { id: "recreate-image" });
       } else {
-        throw new Error("Failed to create image");
+        setTimeout(() => pollTaskStatus(taskId), 2000);
       }
     } catch (error) {
-      console.error("Image creation error:", error);
-      toast.error("Failed to create image", { id: "recreate-image" });
+      toast.error("Error checking image status", { id: "recreate-image" });
     }
+  };
+  
+  pollTaskStatus(response.task_id);
+} else if (response && response.output_image_url) {
+  toast.success("Image created successfully!", { id: "recreate-image" });
+  fetchDoctorsData();
+} else {
+  throw new Error("Failed to create image");
+}
+    } catch (error) {
+  console.error("Image creation error:", error);
+  toast.error("Failed to create image", { id: "recreate-image" });
+} finally {
+  setIsRegeneratingImage(false);
+}
   };
 
   const handleRecreateVideo = async () => {
@@ -640,9 +680,13 @@ const currentRows = doctorsData || [];
     fetchActiveTemplatesList();
   }, []);
 
-  const fetchFilteredTemplatesList = async (newStatus) => {
+const fetchFilteredTemplatesList = async (newStatus) => {
     try {
-      let apiParams = { template_type: selectedTemplateType };
+      let apiParams = { 
+        template_type: selectedTemplateType,
+        user_type: USERTYPE,
+        employee_id: EMPID
+      };
 
       if (tabs !== "all") {
         apiParams.status = newStatus;
@@ -667,14 +711,26 @@ const currentRows = doctorsData || [];
     fetchFilteredTemplatesList(status);
   }, []);
 
-  useEffect(() => {
-    return () => {
-      if (window.livePreviewWindow && !window.livePreviewWindow.closed) {
-        window.livePreviewWindow.close();
-        window.livePreviewWindow = null;
-      }
-    };
-  }, []);
+useEffect(() => {
+  return () => {
+    // Cleanup intervals
+    const intervals = [window.pollInterval, window.statusInterval];
+    intervals.forEach(interval => {
+      if (interval) clearInterval(interval);
+    });
+    
+    // Cleanup preview window
+    if (window.livePreviewWindow && !window.livePreviewWindow.closed) {
+      window.livePreviewWindow.close();
+      window.livePreviewWindow = null;
+    }
+    
+    // Cleanup any pending timeouts
+    if (window.taskStatusTimeout) {
+      clearTimeout(window.taskStatusTimeout);
+    }
+  };
+}, []);
 
   const handleTabs = (tab) => {
     setTabs(tab);
@@ -1340,13 +1396,20 @@ const currentRows = doctorsData || [];
                   Cancel
                 </button>
                 <button
-                  type="button"
-                  onClick={handleRecreateImage}
-                  className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700"
-                  disabled={!selectedTemplate}
-                >
-                  Create Image
-                </button>
+  type="button"
+  onClick={handleRecreateImage}
+  className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
+  disabled={!selectedTemplate || isRegeneratingImage}
+>
+  {isRegeneratingImage ? (
+    <>
+      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white inline-block mr-2"></div>
+      Creating...
+    </>
+  ) : (
+    "Create Image"
+  )}
+</button>
               </div>
             </div>
           </div>
@@ -1461,27 +1524,35 @@ const currentRows = doctorsData || [];
               </button>
               <button
                 onClick={async () => {
-                  try {
-                    toast.loading("Deleting doctor...", {
-                      id: "delete-doctor",
-                    });
+  try {
+    toast.loading("Deleting doctor...", { id: "delete-doctor" });
 
-                    await deleteDoctor(selectedDoctorForDelete.id);
+    const employeeId = getItemInLocalStorage("UserId")?.replace(/"/g, "");
+    
+    if (!employeeId) {
+      toast.error("Employee ID not found", { id: "delete-doctor" });
+      return;
+    }
 
-                    toast.success(
-                      `${selectedDoctorForDelete.name} deleted successfully!`,
-                      { id: "delete-doctor" }
-                    );
-                    setIsDeleteConfirmModalOpen(false);
-                    setSelectedDoctorForDelete(null);
-                    fetchDoctorsData(); // Refresh data
-                  } catch (error) {
-                    toast.error("Failed to delete doctor", {
-                      id: "delete-doctor",
-                    });
-                    console.error("Delete error:", error);
-                  }
-                }}
+    await deleteDoctor(selectedDoctorForDelete.id, {
+      employee_id: employeeId
+    });
+
+    toast.success(
+      `${selectedDoctorForDelete.name} deleted successfully!`,
+      { id: "delete-doctor" }
+    );
+    
+    setIsDeleteConfirmModalOpen(false);
+    setSelectedDoctorForDelete(null);
+    fetchDoctorsData();
+  } catch (error) {
+    console.error("Delete error:", error);
+    toast.error(error.message || "Failed to delete doctor", {
+      id: "delete-doctor"
+    });
+  }
+}}
                 className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700"
               >
                 Delete Permanently
@@ -1671,11 +1742,11 @@ const currentRows = doctorsData || [];
       </nav>
 
       <div className="mt-15 mb-10">
-        <h1 className="text-3xl font-bold text-gray-900 mb-2">
-          {viewMode === "gallery" && USERTYPE === "Admin"
-            ? "Video Template Gallery"
-            : "Doctor Data"}
-        </h1>
+     <h1 className="text-3xl font-bold text-gray-900 mb-2">
+  {viewMode === "gallery" && USERTYPE === "Admin"
+    ? "Image Template Gallery"
+    : "Doctor Data"}
+    </h1>
         <p className="text-gray-600 font-semibold text-lg">
           {viewMode === "gallery" && USERTYPE === "Admin"
             ? "Choose a template to start your next project."
@@ -2371,48 +2442,23 @@ const currentRows = doctorsData || [];
                           )}
                         </td>
                         {/* ADD THIS NEW ACTIONS COLUMN */}
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                          <div className="flex items-center space-x-3">
-                            {/* Edit Button */}
-                            <button
-                              onClick={() => {
-                                setSelectedDoctorForEdit(doctor);
-                                setIsEditDoctorModalOpen(true);
-                              }}
-                              className="flex items-center px-2 py-1 text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded-md transition-colors"
-                              title="Edit Doctor Details"
-                            >
-                              <FaEdit size={14} />
-                              <span className="ml-1 text-xs font-medium">Edit</span>
-                            </button>
-
-                            {/* Regenerate Button */}
-                            <button
-                              onClick={() => {
-                                setSelectedDoctorForEdit(doctor);
-                                setIsRegenerateModalOpen(true);
-                              }}
-                              className="flex items-center px-2 py-1 text-green-600 hover:text-green-800 hover:bg-green-50 rounded-md transition-colors"
-                              title="Generate New Content"
-                            >
-                              <FaImage size={14} />
-                              <span className="ml-1 text-xs font-medium">ReCreate</span>
-                            </button>
-
-                            {/* Delete Button */}
-                            <button
-                              onClick={() => {
-                                setSelectedDoctorForDelete(doctor);
-                                setIsDeleteConfirmModalOpen(true);
-                              }}
-                              className="flex items-center px-2 py-1 text-red-600 hover:text-red-800 hover:bg-red-50 rounded-md transition-colors"
-                              title="Delete Doctor & All Content"
-                            >
-                              <FaTrash size={14} />
-                              <span className="ml-1 text-xs font-medium">Delete</span>
-                            </button>
-                          </div>
-                        </td>
+<td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+  <div className="flex items-center space-x-3">
+    {/* Delete Button Only */}
+<button
+  onClick={() => {
+    console.log("Deleting doctor:", doctor.name, "ID:", doctor.id);
+    setSelectedDoctorForDelete(doctor);
+    setIsDeleteConfirmModalOpen(true);
+  }}
+      className="flex items-center px-2 py-1 text-red-600 hover:text-red-800 hover:bg-red-50 rounded-md transition-colors"
+      title="Delete Doctor & All Content"
+    >
+      <FaTrash size={14} />
+      <span className="ml-1 text-xs font-medium">Delete</span>
+    </button>
+  </div>
+</td>
                       </tr>
 
                       {

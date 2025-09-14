@@ -98,7 +98,7 @@ const Create = () => {
           <h3 className="text-lg  mb-2 mt-2 font-bold">Browse Generated Image Template</h3>
           <p className="text-gray-500 mb-10 font-semibold ">Explore or generate images</p>
           <button onClick={()=>navigate('/gallery')} className="bg-[#0c0b6b] text-white px-6 py-2 font-bold rounded hover:bg-[#1c1b7b]">
-            View Video
+            View Images
           </button>
         </div>
       </div>

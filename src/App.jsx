@@ -1,5 +1,15 @@
 import { useState } from 'react'
-import { Toaster } from 'react-hot-toast';
+import toast, { Toaster } from 'react-hot-toast';
+
+// Add the missing toast.info method
+toast.info = (message, options) => {
+  return toast(message, { 
+    icon: '💬', 
+    duration: 4000,
+    ...options 
+  });
+};
+
 import Login from './pages/Login'
 import Create from './pages/Create'
 import VideoProcessing from './pages/VideoProcessing'
@@ -18,13 +28,14 @@ import Dashboard from './pages/Dashboard';
 import ProtectedAdminRoutes from './routes/ProtectedAdminRoutes';
 import ProtectedStaffRoutes from './routes/ProtectedStaffRoutes';
 import UserDetails from './pages/UserDetails';
+import ErrorBoundary from './pages/ErrorBoundary';
 import './App.css'
 import { HashRouter as Router, Routes, Route, Link ,Navigate} from 'react-router-dom'
 
 function App() {
 
   return (
-    <>
+     <ErrorBoundary>    <>
     <Toaster position="top-center" />
     <Router>
       <Routes>
@@ -102,6 +113,7 @@ function App() {
        
     </Router>
     </>
+    </ErrorBoundary>
   )
 }
 

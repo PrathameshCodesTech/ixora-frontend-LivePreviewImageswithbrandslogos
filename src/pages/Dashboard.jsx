@@ -344,19 +344,27 @@ const fetchTemplateCount = async () => {
   }, []);
 
 
-  const ActiveLogin = async () => {
-    try {
-      const response = await TotalEmployeeActive();
+const ActiveLogin = async () => {
+  try {
+    const response = await TotalEmployeeActive();
+    if (response && Array.isArray(response)) {
       const activeEmployees = response.filter(
         (emp) => emp.has_logged_in === true || emp.has_logged_in === "true"
       );
       setActiveEmployeesCount(activeEmployees.length);
       setTotalActive(activeEmployees);
-    } catch (error) {
-      console.log("Error Getting Active Employee", error);
-      toast.error("Something Went Wrong");
+    } else {
+      console.log("Invalid response format for active employees");
+      setActiveEmployeesCount(0);
+      setTotalActive([]);
     }
-  };
+  } catch (error) {
+    console.log("Error Getting Active Employee", error);
+    // Don't show toast error for this - just set defaults
+    setActiveEmployeesCount(0);
+    setTotalActive([]);
+  }
+};
 
   useEffect(() => {
     ActiveLogin();
