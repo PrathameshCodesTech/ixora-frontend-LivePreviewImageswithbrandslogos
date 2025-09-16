@@ -380,19 +380,24 @@ console.log("🔍 ================================");
 if (response.status === "processing" && response.task_id) {
   toast.loading("Processing image...", { id: "image-processing" });
   
-  // Poll for task completion
-  const pollTaskStatus = async (taskId) => {
+  // Poll for task completion with proper cleanup
+  const pollTaskStatus = async (taskId, attempt = 1) => {
     try {
       const statusData = await getTaskStatus(taskId);
       
       if (statusData.status === "completed") {
         toast.success("Image created successfully!", { id: "image-processing" });
         navigate("/gallery", { state: { createdContent: statusData.result, contentType: "image" } });
+        return; // Stop polling
       } else if (statusData.status === "failed") {
         toast.error("Image creation failed", { id: "image-processing" });
-      } else {
+        return; // Stop polling
+      } else if (attempt < 30) { // Max 60 seconds of polling
         // Still processing, poll again after 2 seconds
-        setTimeout(() => pollTaskStatus(taskId), 2000);
+        setTimeout(() => pollTaskStatus(taskId, attempt + 1), 2000);
+      } else {
+        toast.error("Processing timeout - please check gallery", { id: "image-processing" });
+        navigate("/gallery");
       }
     } catch (error) {
       toast.error("Error checking image status", { id: "image-processing" });
@@ -434,44 +439,37 @@ if (response.status === "processing" && response.task_id) {
 
   const [templateList, setTemplatesList] = useState([]);
 
-  const [selectedTemplateType, setSelectedTemplateType] = useState(
-  FEATURE_FLAGS.ENABLE_VIDEO_FEATURES ? "video" : "image"
-);
+const [selectedTemplateType, setSelectedTemplateType] = useState("image");
   const [isSearchingDoctor, setIsSearchingDoctor] = useState(false);
   const [doctorFoundMessage, setDoctorFoundMessage] = useState("");
 
   // ADD THESE LINES:
 const [brandCategories, setBrandCategories] = useState([]);
 const [selectedBrands, setSelectedBrands] = useState([]);
+const [showTemplatePreview, setShowTemplatePreview] = useState(false);
 
   const fetchTemplatesList = async () => {
-    try {
-      // Add user context to template requests
-      const userParams = {
-        user_type: USERTYPE,
-        employee_id: EMPLOYEE_ID?.replace(/"/g, "")
-      };
+  try {
+    // Add user context to template requests
+    const userParams = {
+      user_type: USERTYPE,
+      employee_id: EMPLOYEE_ID?.replace(/"/g, "")
+    };
 
-      // Fetch both video and image templates with user context
-      const videoRes = await getVideoTemplates(userParams);
-      console.log("Video templates:", videoRes);
+    // Only fetch image templates since ENABLE_VIDEO_FEATURES is false
+    const imageRes = await getImageTemplates(userParams);
+    console.log("Image templates:", imageRes);
 
-      const imageRes = await getImageTemplates(userParams);
-      console.log("Image templates:", imageRes);
-
-      // Combine both arrays and ensure template_type is set
-      const allTemplates = [
-        ...videoRes.map(template => ({ ...template, template_type: template.template_type || 'video' })),
-        ...imageRes.map(template => ({ ...template, template_type: template.template_type || 'image' }))
-      ];
-
-      console.log("Combined templates:", allTemplates);
-      setTemplatesList(allTemplates);
-    } catch (error) {
-      console.log("Error fetching templates:", error);
-      toast.error("Failed to load templates");
-    }
-  };
+    // Set only image templates
+    setTemplatesList(imageRes.map(template => ({ 
+      ...template, 
+      template_type: 'image' 
+    })));
+  } catch (error) {
+    console.log("Error fetching templates:", error);
+    toast.error("Failed to load templates");
+  }
+};
   const getTemplatePositionsPreview = (templateId) => {
     const selectedTemplate = templateList.find(t => t.id === parseInt(templateId));
     if (!selectedTemplate || !selectedTemplate.text_positions) {
@@ -692,7 +690,7 @@ useEffect(() => {
                 )}
               </div>
               {/* Template Type Selection */}
-              {FEATURE_FLAGS.ENABLE_VIDEO_FEATURES ? (
+{FEATURE_FLAGS.ENABLE_VIDEO_FEATURES ? (
   <div className="col-span-2 mb-4">
     <label className="block font-bold text-xl mb-3">
       Content Type
@@ -743,13 +741,12 @@ useEffect(() => {
   <select
     value={formData.template}
     onChange={(e) => {
-      handleInputChange(e);
-      // When template changes, show preview for image templates
-      if (selectedTemplateType === "image" && e.target.value) {
-        const templatePositions = getTemplatePositionsPreview(e.target.value);
-        console.log("Selected template positions:", templatePositions);
-      }
-    }}
+  handleInputChange(e);
+  if (e.target.value) {
+    setShowTemplatePreview(true);
+    setTimeout(() => setShowTemplatePreview(false), 4000);
+  }
+}}
     name="template"
     className={`w-full border ${errors.template ? "border-red-500" : "border-gray-300"
       } rounded-md px-4 py-2 mb-1`}
@@ -758,19 +755,20 @@ useEffect(() => {
       Select {FEATURE_FLAGS.ENABLE_VIDEO_FEATURES ? 
         (selectedTemplateType === "video" ? "Video" : "Image") : 
         ""} Template
-    </option>                  {templateList
-                    .filter(template => template.template_type === selectedTemplateType)
-                    .map((list) => (
-                      <option value={list.id} key={list.id}>
-                        {list.name} {selectedTemplateType === "image" && list.text_positions ? "✨" : ""}
-                      </option>
-                    ))}
+    </option> 
+{templateList
+  .filter(template => template.template_type === 'image')
+  .map((list) => (
+    <option value={list.id} key={list.id}>
+      {list.name}
+    </option>
+  ))}
                 </select>
 
                 {/* ADD TEMPLATE PREVIEW FOR IMAGE TEMPLATES */}
                 {/* ADD TEMPLATE PREVIEW FOR IMAGE TEMPLATES */}
-{selectedTemplateType === "image" && formData.template && (
-  <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded-md">
+{formData.template && showTemplatePreview && (
+  <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded-md transition-all duration-500">
     <div className="text-sm font-medium text-blue-700 mb-2">Template Preview:</div>
     {(() => {
       const templatePositions = getTemplatePositionsPreview(formData.template);
@@ -787,11 +785,11 @@ useEffect(() => {
           <div>Custom Text: "{selectedTemplate?.custom_text || 'Not set'}"</div>
           <div>Positions configured for: {Object.keys(templatePositions).join(", ")}</div>
           {brandSettings && brandSettings.enabled && (
-            <div className="text-purple-600">
-              🎨 Brand logos will be: {brandSettings.brandWidth || 100} × {brandSettings.brandHeight || 60} pixels
-            </div>
-          )}
-          <div className="text-green-600">✅ This template will use your Gallery positioning</div>
+<div className="text-purple-600">
+  Brand logos will be: {brandSettings.brandWidth || 100} × {brandSettings.brandHeight || 60} pixels
+</div>
+)}
+<div className="text-green-600">This template will use your Gallery positioning</div>
         </div>
       );
     })()}
@@ -804,11 +802,11 @@ useEffect(() => {
             </div>
 
               {/* Brand Selection by Category - Only for Image Templates */}
-            {selectedTemplateType === "image" && formData.template && (
-              <div className="col-span-2 mb-4">
-                <label className="block font-bold text-xl mb-3">
-                  Select Brands (Optional)
-                </label>
+           {formData.template && (
+  <div className="col-span-2 mb-4">
+    <label className="block font-bold text-xl mb-3">
+      Select Brands (Optional)
+    </label>
                 <div className="space-y-4">
                   {brandCategories.map((category) => (
                     <div key={category.category_key} className="border border-gray-200 rounded-lg p-4">

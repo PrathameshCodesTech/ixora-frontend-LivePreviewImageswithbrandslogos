@@ -115,9 +115,7 @@ const [page, setPage] = useState(1);
   const [selectedDoctorForDelete, setSelectedDoctorForDelete] = useState(null);
   const [selectedContentForDelete, setSelectedContentForDelete] =
     useState(null);
-  const [regenerateContentType, setRegenerateContentType] = useState(
-    FEATURE_FLAGS.ENABLE_VIDEO_FEATURES ? "video" : "image"
-  );
+const [regenerateContentType, setRegenerateContentType] = useState("image");
 
   const debugTokens = () => {
     console.log("🔍 =====FULL TOKEN DEBUG=====");
@@ -643,9 +641,7 @@ if (response.status === "processing" && response.task_id) {
 
   const [status, setStatus] = useState(false);
 
-  const [templateType, setTemplateType] = useState(
-    FEATURE_FLAGS.ENABLE_VIDEO_FEATURES ? "video" : "image"
-  ); // video or image
+const [templateType, setTemplateType] = useState("image");
   const [imageTemplates, setImageTemplates] = useState([]);
   const [selectedTemplateType, setSelectedTemplateType] = useState("image");
   const [imageFormData, setImageFormData] = useState({
@@ -666,12 +662,12 @@ if (response.status === "processing" && response.task_id) {
   //   }
   // };
 
-  const fetchActiveTemplatesList = async (newStatus) => {
+const fetchActiveTemplatesList = async (newStatus) => {
     try {
-      const videoRes = await getVideoTemplates();
       const imageRes = await getImageTemplates();
-      setListTemplate(videoRes);
+      setListTemplate(imageRes);  // Use image templates for both
       setImageTemplates(imageRes);
+
     } catch (error) {
       console.log(error);
     }
@@ -683,7 +679,7 @@ if (response.status === "processing" && response.task_id) {
 const fetchFilteredTemplatesList = async (newStatus) => {
     try {
       let apiParams = { 
-        template_type: selectedTemplateType,
+        template_type: 'image',  // Force image templates only
         user_type: USERTYPE,
         employee_id: EMPID
       };
@@ -706,8 +702,8 @@ const fetchFilteredTemplatesList = async (newStatus) => {
   useEffect(() => {
     fetchFilteredTemplatesList(status);
   }, [tabs]);
-  useEffect(() => {
-    setSelectedTemplateType("image"); // Force image templates only
+useEffect(() => {
+    setSelectedTemplateType("image");
     fetchFilteredTemplatesList(status);
   }, []);
 

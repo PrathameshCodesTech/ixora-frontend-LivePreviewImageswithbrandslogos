@@ -67,13 +67,20 @@ export const employeeCreation = async (data) => {
 export const getAllDoctors = async (page = 1, search = '', specialization = '') => {
   const params = new URLSearchParams({ 
     page: page.toString(),
-    user_type: 'Admin',  // Ensure admin access
+    user_type: 'Admin',
     employee_id: getItemInLocalStorage('UserId')?.replace(/"/g, '') || ''
   });
   if (search) params.append('search', search);
   if (specialization) params.append('specialization', specialization);
   
-  const response = await axios.get(`${BASE_URL}/api/doctors/?${params}`);
+  const token = getAuthToken(); // Use your existing helper function
+  
+  const response = await axios.get(`${BASE_URL}/api/doctors/?${params}`, {
+    headers: {
+      'Authorization': token ? `Bearer ${token}` : undefined,
+      'Content-Type': 'application/json'
+    }
+  });
   return response.data;
 };
 
