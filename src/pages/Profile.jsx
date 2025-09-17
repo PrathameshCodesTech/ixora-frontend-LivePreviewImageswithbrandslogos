@@ -210,10 +210,6 @@ const Profile = () => {
       newErrors.specialization = "Specialization is required";
       valid = false;
     }
-    if (!formData.hospital.trim()) {
-      newErrors.hospital = "Hospital name is required";
-      valid = false;
-    }
     if (!formData.template.trim()) {
       newErrors.template = "Select Template";
       valid = false;
@@ -241,7 +237,7 @@ const Profile = () => {
       valid = false;
     }
     // Only require photo for video templates
-// For image templates, photos are optional - no validation needed
+    // For image templates, photos are optional - no validation needed
 
     setErrors(newErrors);
     return valid;
@@ -318,13 +314,13 @@ const Profile = () => {
 
       if (!formData.template) {
         toast.error("Please select a template first");
-        return; 
-      }  
+        return;
+      }
 
-      const templateDetails = await getTemplatesDetailsById(formData.template); 
-      if (!templateDetails) {   
-        toast.error("Selected template not found. Please choose another template.");   
-        return; 
+      const templateDetails = await getTemplatesDetailsById(formData.template);
+      if (!templateDetails) {
+        toast.error("Selected template not found. Please choose another template.");
+        return;
       }
 
       console.log("🔍 Template Details Fetched:", templateDetails);
@@ -332,104 +328,104 @@ const Profile = () => {
       console.log("🔍 Text Positions:", templateDetails.text_positions);
       console.log("🔍 Template Brand Area Settings:", templateDetails.brand_area_settings);
       toast.dismiss("template-fetch");
-          // Use template's custom_text and positioning
-          // For image templates, use different API
-const imageData = {
-  template_id: formData.template,
-  mobile: formData.mobileNumber,
-  name: formData.doctorName,
-  selected_brands: selectedBrands,
-  employee_id: getItemInLocalStorage("UserId")?.replace(/"/g, ''), // Always send employee_id
-  content_data: {
-    message: templateDetails.custom_text || "",
-    custom_text: templateDetails.custom_text || "",
-    doctor_name: formData.doctorName,
-    doctor_specialization: formData.specialization,
-    doctor_clinic: formData.hospital,
-    doctor_city: formData.city,
-    doctor_state: formData.state,
-    selected_brands: selectedBrands
-  },
-  doctor_data: {
-    name: formData.doctorName,
-    clinic: formData.hospital,
-    city: formData.city,
-    specialization: formData.specialization,
-    mobile: formData.mobileNumber,
-    state: formData.state
-  }
-};
+      // Use template's custom_text and positioning
+      // For image templates, use different API
+      const imageData = {
+        template_id: formData.template,
+        mobile: formData.mobileNumber,
+        name: formData.doctorName,
+        selected_brands: selectedBrands,
+        employee_id: getItemInLocalStorage("UserId")?.replace(/"/g, ''), // Always send employee_id
+        user_type: getItemInLocalStorage("UserType")?.replace(/"/g, ''),
+        content_data: {
+          message: templateDetails.custom_text || "",
+          custom_text: templateDetails.custom_text || "",
+          doctor_name: formData.doctorName,
+          doctor_specialization: formData.specialization,
+          doctor_city: formData.city,
+          doctor_state: formData.state,
+          selected_brands: selectedBrands
+        },
+        doctor_data: {
+          name: formData.doctorName,
+          clinic: formData.hospital,
+          city: formData.city,
+          specialization: formData.specialization,
+          mobile_number: formData.mobileNumber,
+          state: formData.state
+        }
+      };
 
-console.log("🔍 Sending employee_id:", imageData.employee_id); // Debug log
+      console.log("🔍 Sending employee_id:", imageData.employee_id); // Debug log
 
-console.log("🔍 Sending image data with template details:", imageData);
-console.log("🔍 Doctor data being sent:", imageData.doctor_data);
-console.log("🔍 Clinic in doctor_data:", imageData.doctor_data.clinic);
-console.log("🔍 City in doctor_data:", imageData.doctor_data.city);
+      console.log("🔍 Sending image data with template details:", imageData);
+      console.log("🔍 Doctor data being sent:", imageData.doctor_data);
+      console.log("🔍 Clinic in doctor_data:", imageData.doctor_data.clinic);
+      console.log("🔍 City in doctor_data:", imageData.doctor_data.city);
 
-const response = await generateImageContent(imageData);
-console.log("🔍 =====IMAGE CREATION DEBUG=====");
+      const response = await generateImageContent(imageData);
+      console.log("🔍 =====IMAGE CREATION DEBUG=====");
 
-console.log("🔍 IMAGE CREATION RESPONSE:", response);
-console.log("🔍 Image response keys:", Object.keys(response || {}));
-console.log("🔍 Image response doctor_info:", response.doctor_info);
-console.log("🔍 Image response output_image_url:", response.output_image_url);
-console.log("🔍 ================================");
+      console.log("🔍 IMAGE CREATION RESPONSE:", response);
+      console.log("🔍 Image response keys:", Object.keys(response || {}));
+      console.log("🔍 Image response doctor_info:", response.doctor_info);
+      console.log("🔍 Image response output_image_url:", response.output_image_url);
+      console.log("🔍 ================================");
 
-// Handle async image processing
-if (response.status === "processing" && response.task_id) {
-  toast.loading("Processing image...", { id: "image-processing" });
-  
-  // Poll for task completion with proper cleanup
-  const pollTaskStatus = async (taskId, attempt = 1) => {
-    try {
-      const statusData = await getTaskStatus(taskId);
-      
-      if (statusData.status === "completed") {
-        toast.success("Image created successfully!", { id: "image-processing" });
-        navigate("/gallery", { state: { createdContent: statusData.result, contentType: "image" } });
-        return; // Stop polling
-      } else if (statusData.status === "failed") {
-        toast.error("Image creation failed", { id: "image-processing" });
-        return; // Stop polling
-      } else if (attempt < 30) { // Max 60 seconds of polling
-        // Still processing, poll again after 2 seconds
-        setTimeout(() => pollTaskStatus(taskId, attempt + 1), 2000);
+      // Handle async image processing
+      if (response.status === "processing" && response.task_id) {
+        toast.loading("Processing image...", { id: "image-processing" });
+
+        // Poll for task completion with proper cleanup
+        const pollTaskStatus = async (taskId, attempt = 1) => {
+          try {
+            const statusData = await getTaskStatus(taskId);
+
+            if (statusData.status === "completed") {
+              toast.success("Image created successfully!", { id: "image-processing" });
+              navigate("/gallery", { state: { createdContent: statusData.result, contentType: "image" } });
+              return; // Stop polling
+            } else if (statusData.status === "failed") {
+              toast.error("Image creation failed", { id: "image-processing" });
+              return; // Stop polling
+            } else if (attempt < 30) { // Max 60 seconds of polling
+              // Still processing, poll again after 2 seconds
+              setTimeout(() => pollTaskStatus(taskId, attempt + 1), 2000);
+            } else {
+              toast.error("Processing timeout - please check gallery", { id: "image-processing" });
+              navigate("/gallery");
+            }
+          } catch (error) {
+            toast.error("Error checking image status", { id: "image-processing" });
+          }
+        };
+
+        pollTaskStatus(response.task_id);
       } else {
-        toast.error("Processing timeout - please check gallery", { id: "image-processing" });
-        navigate("/gallery");
+        // Handle immediate response (fallback)
+        navigate("/gallery", { state: { createdContent: response, contentType: "image" } });
       }
-    } catch (error) {
-      toast.error("Error checking image status", { id: "image-processing" });
-    }
-  };
-  
-  pollTaskStatus(response.task_id);
-} else {
-  // Handle immediate response (fallback)
-  navigate("/gallery", { state: { createdContent: response, contentType: "image" } });
-}
 
     } catch (error) {
-  console.error("API Error:", error);
-  
-  let errorMessage = "Content creation failed. Please try again.";
-  
-  if (error.response?.status === 429) {
-    errorMessage = "Too many requests. Please wait before trying again.";
-  } else if (error.response?.status === 413) {
-    errorMessage = "File too large. Please use a smaller image.";
-  } else if (error.response?.data?.message) {
-    errorMessage = error.response.data.message;
-  } else if (!error.response) {
-    errorMessage = "Network error. Please check your connection.";
-  }
-  
-  setApiError(errorMessage);
-  toast.error(errorMessage);
-} finally {
-  setIsSubmitting(false);
-}
+      console.error("API Error:", error);
+
+      let errorMessage = "Content creation failed. Please try again.";
+
+      if (error.response?.status === 429) {
+        errorMessage = "Too many requests. Please wait before trying again.";
+      } else if (error.response?.status === 413) {
+        errorMessage = "File too large. Please use a smaller image.";
+      } else if (error.response?.data?.message) {
+        errorMessage = error.response.data.message;
+      } else if (!error.response) {
+        errorMessage = "Network error. Please check your connection.";
+      }
+
+      setApiError(errorMessage);
+      toast.error(errorMessage);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
   const [templates, setTemplates] = useState([]);
   const [selectedTemplate, setSelectedTemplate] = useState("");
@@ -439,37 +435,38 @@ if (response.status === "processing" && response.task_id) {
 
   const [templateList, setTemplatesList] = useState([]);
 
-const [selectedTemplateType, setSelectedTemplateType] = useState("image");
+  const [selectedTemplateType, setSelectedTemplateType] = useState("image");
   const [isSearchingDoctor, setIsSearchingDoctor] = useState(false);
   const [doctorFoundMessage, setDoctorFoundMessage] = useState("");
 
   // ADD THESE LINES:
-const [brandCategories, setBrandCategories] = useState([]);
-const [selectedBrands, setSelectedBrands] = useState([]);
-const [showTemplatePreview, setShowTemplatePreview] = useState(false);
+  const [brandCategories, setBrandCategories] = useState([]);
+  const [selectedBrands, setSelectedBrands] = useState([]);
+  const [showTemplatePreview, setShowTemplatePreview] = useState(false);
 
   const fetchTemplatesList = async () => {
-  try {
-    // Add user context to template requests
-    const userParams = {
-      user_type: USERTYPE,
-      employee_id: EMPLOYEE_ID?.replace(/"/g, "")
-    };
+    try {
+      // Add user context to template requests
+      const userParams = {
+        user_type: USERTYPE,
+        employee_id: EMPLOYEE_ID?.replace(/"/g, "")
+      };
 
-    // Only fetch image templates since ENABLE_VIDEO_FEATURES is false
-    const imageRes = await getImageTemplates(userParams);
-    console.log("Image templates:", imageRes);
+      // Only fetch image templates since ENABLE_VIDEO_FEATURES is false
+      const imageRes = await getImageTemplates(userParams);
+      console.log("Image templates:", imageRes);
 
-    // Set only image templates
-    setTemplatesList(imageRes.map(template => ({ 
-      ...template, 
-      template_type: 'image' 
-    })));
-  } catch (error) {
-    console.log("Error fetching templates:", error);
-    toast.error("Failed to load templates");
-  }
-};
+      // Filter only active templates (status: true) and set only image templates
+      const activeTemplates = imageRes.filter(template => template.status === true);
+      setTemplatesList(activeTemplates.map(template => ({
+        ...template,
+        template_type: 'image'
+      })));
+    } catch (error) {
+      console.log("Error fetching templates:", error);
+      toast.error("Failed to load templates");
+    }
+  };
   const getTemplatePositionsPreview = (templateId) => {
     const selectedTemplate = templateList.find(t => t.id === parseInt(templateId));
     if (!selectedTemplate || !selectedTemplate.text_positions) {
@@ -480,54 +477,54 @@ const [showTemplatePreview, setShowTemplatePreview] = useState(false);
   };
 
   const fetchBrandCategories = async () => {
-  try {
-    const response = await getAllBrands();
-    setBrandCategories(response.categories || []);
-  } catch (error) {
-    console.error("Error fetching brands:", error);
-    toast.error("Failed to load brands");
-  }
-};
-
-const handleBrandSelection = (brandId, isSelected) => {
-  if (isSelected) {
-    if (selectedBrands.length < 10) {
-      setSelectedBrands(prev => [...prev, brandId]);
-    } else {
-      toast.error("You can select maximum 10 brands");
-    }
-  } else {
-    setSelectedBrands(prev => prev.filter(id => id !== brandId));
-  }
-};
-
-useEffect(() => {
-  const initializeData = async () => {
     try {
-      setIsLoading(true);
-      // Only fetch what's needed, with delays between calls
-      await fetchTemplatesList();
-      await new Promise(resolve => setTimeout(resolve, 200));
-      await fetchBrandCategories();
-      // Remove checkImageTemplates() - it's redundant
+      const response = await getAllBrands();
+      setBrandCategories(response.categories || []);
     } catch (error) {
-      console.error("Error initializing data:", error);
-      toast.error("Failed to load templates");
-    } finally {
-      setIsLoading(false);
+      console.error("Error fetching brands:", error);
+      toast.error("Failed to load brands");
     }
   };
 
-  initializeData();
-  
-  // Cleanup function
-  return () => {
-    // Clear any pending polling timeouts
-    if (window.taskPollingTimeout) {
-      clearTimeout(window.taskPollingTimeout);
+  const handleBrandSelection = (brandId, isSelected) => {
+    if (isSelected) {
+      if (selectedBrands.length < 10) {
+        setSelectedBrands(prev => [...prev, brandId]);
+      } else {
+        toast.error("You can select maximum 10 brands");
+      }
+    } else {
+      setSelectedBrands(prev => prev.filter(id => id !== brandId));
     }
   };
-}, []);
+
+  useEffect(() => {
+    const initializeData = async () => {
+      try {
+        setIsLoading(true);
+        // Only fetch what's needed, with delays between calls
+        await fetchTemplatesList();
+        await new Promise(resolve => setTimeout(resolve, 200));
+        await fetchBrandCategories();
+        // Remove checkImageTemplates() - it's redundant
+      } catch (error) {
+        console.error("Error initializing data:", error);
+        toast.error("Failed to load templates");
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    initializeData();
+
+    // Cleanup function
+    return () => {
+      // Clear any pending polling timeouts
+      if (window.taskPollingTimeout) {
+        clearTimeout(window.taskPollingTimeout);
+      }
+    };
+  }, []);
 
   if (isLoading) {
     return (
@@ -552,358 +549,341 @@ useEffect(() => {
               className="space-y-4 w-full"
               onSubmit={handleSubmit}
             >
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end mt-5 mb-8">
-              <div>
-                <label className="block mb-1 font-bold text-xl">
-                  Mobile Number
-                </label>
-                <div className="relative">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end mt-5 mb-8">
+                <div>
+                  <label className="block mb-1 font-bold text-xl">
+                    Mobile Number
+                  </label>
+                  <div className="relative">
+                    <input
+                      type="text"
+                      name="mobileNumber"
+                      placeholder="Enter mobile number"
+                      className={`w-full border ${errors.mobileNumber ? "border-red-500" : "border-gray-300"
+                        } rounded-md px-4 py-2 ${isSearchingDoctor ? 'pr-10' : ''}`}
+                      value={formData.mobileNumber}
+                      onChange={(e) => {
+                        handleInputChange(e);
+                        handleMobileNumberChange(e.target.value);
+                        if (sameNumber) {
+                          setFormData((prev) => ({
+                            ...prev,
+                            whatsappNumber: e.target.value,
+                          }));
+                        }
+                      }}
+                    />
+                    {isSearchingDoctor && (
+                      <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
+                        <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-600"></div>
+                      </div>
+                    )}
+                  </div>
+
+                  {errors.mobileNumber && (
+                    <p className="text-red-500 text-sm">{errors.mobileNumber}</p>
+                  )}
+                </div>
+                <div>
+                  <label className="block mb-1 font-bold text-xl">
+                    WhatsApp Number
+                  </label>
                   <input
                     type="text"
-                    name="mobileNumber"
-                    placeholder="Enter mobile number"
-                    className={`w-full border ${errors.mobileNumber ? "border-red-500" : "border-gray-300"
-                      } rounded-md px-4 py-2 ${isSearchingDoctor ? 'pr-10' : ''}`}
-                    value={formData.mobileNumber}
+                    name="whatsappNumber"
+                    placeholder="Enter WhatsApp number"
+                    className={`w-full border ${errors.whatsappNumber ? "border-red-500" : "border-gray-300"
+                      } rounded-md px-4 py-2`}
+                    value={formData.whatsappNumber}
+                    onChange={handleInputChange}
+                  />
+                  {errors.whatsappNumber && (
+                    <p className="text-red-500 text-sm">
+                      {errors.whatsappNumber}
+                    </p>
+                  )}
+                </div>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={sameNumber}
                     onChange={(e) => {
-                      handleInputChange(e);
-                      handleMobileNumberChange(e.target.value);
-                      if (sameNumber) {
+                      const checked = e.target.checked;
+                      setSameNumber(checked);
+                      if (checked) {
                         setFormData((prev) => ({
                           ...prev,
-                          whatsappNumber: e.target.value,
+                          whatsappNumber: prev.mobileNumber,
                         }));
                       }
                     }}
+                    className="form-checkbox h-5 w-5 text-blue-600"
                   />
-                  {isSearchingDoctor && (
-                    <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
-                      <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-600"></div>
+                  <label className="font-medium text-md">
+                    WhatsApp Number Same
+                    <br />
+                    <span className="text-gray-500 text-xs">
+                      Check if both numbers are same
+                    </span>
+                  </label>
+                </div>
+              </div>
+              {/* Doctor Full Name */}
+
+
+              {/* Specialization & Hospital */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label htmlFor="" className="block font-bold text-xl mb-2">
+                    Key Specialization
+                  </label>
+                  <input
+                    type="text"
+                    name="specialization_key"
+                    placeholder="Enter key specialization"
+                    value={formData.specialization_key}
+                    onChange={handleInputChange}
+                    className={`w-full border ${errors.doctorName ? "border-red-500" : "border-gray-300"
+                      } rounded-md px-4 py-2 mb-1`}
+                  />
+                  {errors.doctorName && (
+                    <p className="text-red-500 text-sm">{errors.specialization_key}</p>
+                  )}
+                </div>
+                <div>
+                  <label className="block mb-2 font-bold text-xl">
+                    Specialization
+                  </label>
+                  <input
+                    type="text"
+                    name="specialization"
+                    placeholder="Enter specialization"
+                    className={`w-full border ${errors.specialization ? "border-red-500" : "border-gray-300"
+                      } rounded-md px-4 py-2 mb-1`}
+                    value={formData.specialization}
+                    onChange={handleInputChange}
+                  />
+                  {errors.specialization && (
+                    <p className="text-red-500 text-sm">
+                      {errors.specialization}
+                    </p>
+                  )}
+                </div>
+                {/* Template Type Selection */}
+                {FEATURE_FLAGS.ENABLE_VIDEO_FEATURES ? (
+                  <div className="col-span-2 mb-4">
+                    <label className="block font-bold text-xl mb-3">
+                      Content Type
+                    </label>
+                    <div className="flex items-center space-x-6">
+                      <label className="flex items-center cursor-pointer">
+                        <input
+                          type="radio"
+                          name="templateType"
+                          value="video"
+                          checked={selectedTemplateType === "video"}
+                          onChange={(e) => {
+                            setSelectedTemplateType(e.target.value);
+                            setFormData(prev => ({ ...prev, template: "" }));
+                            setSelectedBrands([]);
+                          }}
+                          className="mr-3 h-4 w-4 text-blue-600"
+                        />
+                        <span className="text-lg font-medium">📹 Video Template</span>
+                      </label>
+                      <label className="flex items-center cursor-pointer">
+                        <input
+                          type="radio"
+                          name="templateType"
+                          value="image"
+                          checked={selectedTemplateType === "image"}
+                          onChange={(e) => {
+                            setSelectedTemplateType(e.target.value);
+                            setFormData(prev => ({ ...prev, template: "" }));
+                            setSelectedBrands([]);
+                          }}
+                          className="mr-3 h-4 w-4 text-blue-600"
+                        />
+                        <span className="text-lg font-medium">🖼️ Image Template</span>
+                      </label>
+                    </div>
+                  </div>
+                ) : (
+                  <input type="hidden" name="templateType" value="image" />
+                )}
+
+                <div>
+                  <label className="block font-bold text-xl mb-2">
+                    Choose {FEATURE_FLAGS.ENABLE_VIDEO_FEATURES ?
+                      (selectedTemplateType === "video" ? "Video" : "Image") :
+                      ""} Template
+                  </label>
+                  <select
+                    value={formData.template}
+                    onChange={(e) => {
+                      handleInputChange(e);
+                      if (e.target.value) {
+                        setShowTemplatePreview(true);
+                        setTimeout(() => setShowTemplatePreview(false), 4000);
+                      }
+                    }}
+                    name="template"
+                    className={`w-full border ${errors.template ? "border-red-500" : "border-gray-300"
+                      } rounded-md px-4 py-2 mb-1`}
+                  >
+                    <option value="">
+                      Select {FEATURE_FLAGS.ENABLE_VIDEO_FEATURES ?
+                        (selectedTemplateType === "video" ? "Video" : "Image") :
+                        ""} Template
+                    </option>
+                    {templateList
+                      .filter(template => template.template_type === 'image')
+                      .map((list) => (
+                        <option value={list.id} key={list.id}>
+                          {list.name}
+                        </option>
+                      ))}
+                  </select>
+
+                  {/* ADD TEMPLATE PREVIEW FOR IMAGE TEMPLATES */}
+                  {/* ADD TEMPLATE PREVIEW FOR IMAGE TEMPLATES */}
+                  {formData.template && showTemplatePreview && (
+                    <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded-md transition-all duration-500">
+                      <div className="text-sm font-medium text-blue-700 mb-2">Template Preview:</div>
+                      {(() => {
+                        const templatePositions = getTemplatePositionsPreview(formData.template);
+                        const selectedTemplate = templateList.find(t => t.id === parseInt(formData.template));
+
+                        if (!templatePositions) {
+                          return <div className="text-red-500 text-xs">No positioning data available</div>;
+                        }
+
+                        const brandSettings = selectedTemplate?.brand_area_settings;
+
+                        return (
+                          <div className="space-y-1 text-xs">
+                            <div>Custom Text: "{selectedTemplate?.custom_text || 'Not set'}"</div>
+                            <div>Positions configured for: {Object.keys(templatePositions).join(", ")}</div>
+                            {brandSettings && brandSettings.enabled && (
+                              <div className="text-purple-600">
+                                Brand logos will be: {brandSettings.brandWidth || 100} × {brandSettings.brandHeight || 60} pixels
+                              </div>
+                            )}
+                            <div className="text-green-600">This template will use your Gallery positioning</div>
+                          </div>
+                        );
+                      })()}
+                    </div>
+                  )}
+                  {errors.template && (
+                    <p className="text-red-500 text-sm">{errors.template}</p>
+                  )}
+                </div>
+              </div>
+
+              {/* Brand Selection by Category - Only for Image Templates */}
+              {formData.template && (
+                <div className="col-span-2 mb-4">
+                  <label className="block font-bold text-xl mb-3">
+                    Select Brands (Optional)
+                  </label>
+                  <div className="space-y-4">
+                    {brandCategories.map((category) => (
+                      <div key={category.category_key} className="border border-gray-200 rounded-lg p-4">
+                        <h4 className="font-semibold text-lg mb-3 text-green-700">
+                          {category.category_name}
+                        </h4>
+                        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+                          {category.brands.map((brand) => (
+                            <label key={brand.id} className="flex items-center space-x-2 cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={selectedBrands.includes(brand.id)}
+                                onChange={(e) => handleBrandSelection(brand.id, e.target.checked)}
+                                className="form-checkbox h-4 w-4 text-blue-600"
+                              />
+                              <img
+                                src={brand.brand_image}
+                                alt={brand.name}
+                                className="w-8 h-8 object-contain"
+                              />
+                              <span className="text-sm">{brand.name}</span>
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  {selectedBrands.length > 0 && (
+                    <div className="mt-3 p-2 bg-green-50 border border-green-200 rounded">
+                      <span className="text-green-700 font-medium">
+                        Selected: {selectedBrands.length} brand(s)
+                      </span>
                     </div>
                   )}
                 </div>
+              )}
 
-                {errors.mobileNumber && (
-                  <p className="text-red-500 text-sm">{errors.mobileNumber}</p>
-                )}
-              </div>
-              <div>
-                <label className="block mb-1 font-bold text-xl">
-                  WhatsApp Number
-                </label>
-                <input
-                  type="text"
-                  name="whatsappNumber"
-                  placeholder="Enter WhatsApp number"
-                  className={`w-full border ${errors.whatsappNumber ? "border-red-500" : "border-gray-300"
-                    } rounded-md px-4 py-2`}
-                  value={formData.whatsappNumber}
-                  onChange={handleInputChange}
-                />
-                {errors.whatsappNumber && (
-                  <p className="text-red-500 text-sm">
-                    {errors.whatsappNumber}
-                  </p>
-                )}
-              </div>
-              <div className="flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  checked={sameNumber}
-                  onChange={(e) => {
-                    const checked = e.target.checked;
-                    setSameNumber(checked);
-                    if (checked) {
-                      setFormData((prev) => ({
-                        ...prev,
-                        whatsappNumber: prev.mobileNumber,
-                      }));
-                    }
-                  }}
-                  className="form-checkbox h-5 w-5 text-blue-600"
-                />
-                <label className="font-medium text-md">
-                  WhatsApp Number Same
-                  <br />
-                  <span className="text-gray-500 text-xs">
-                    Check if both numbers are same
-                  </span>
-                </label>
-              </div>
-            </div>
-            {/* Doctor Full Name */}
-            
 
-            {/* Specialization & Hospital */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label htmlFor="" className="block font-bold text-xl mb-2">
-                  Key Specialization
-                </label>
-                <input
-                  type="text"
-                  name="specialization_key"
-                  placeholder="Enter key specialization"
-                  value={formData.specialization_key}
-                  onChange={handleInputChange}
-                  className={`w-full border ${errors.doctorName ? "border-red-500" : "border-gray-300"
-                    } rounded-md px-4 py-2 mb-1`}
-                />
-                {errors.doctorName && (
-                  <p className="text-red-500 text-sm">{errors.specialization_key}</p>
-                )}
-              </div>
-              <div>
-                <label className="block mb-2 font-bold text-xl">
-                  Specialization
-                </label>
-                <input
-                  type="text"
-                  name="specialization"
-                  placeholder="Enter specialization"
-                  className={`w-full border ${errors.specialization ? "border-red-500" : "border-gray-300"
-                    } rounded-md px-4 py-2 mb-1`}
-                  value={formData.specialization}
-                  onChange={handleInputChange}
-                />
-                {errors.specialization && (
-                  <p className="text-red-500 text-sm">
-                    {errors.specialization}
-                  </p>
-                )}
-              </div>
-              <div>
-                <label className="block font-bold text-xl mb-2">
-                  Hospital / Clinic Name
-                </label>
-                <input
-                  type="text"
-                  name="hospital"
-                  placeholder="Enter hospital or clinic"
-                  className={`w-full border ${errors.hospital ? "border-red-500" : "border-gray-300"
-                    } rounded-md px-4 py-2 mb-1`}
-                  value={formData.hospital}
-                  onChange={handleInputChange}
-                />
-                {errors.hospital && (
-                  <p className="text-red-500 text-sm">{errors.hospital}</p>
-                )}
-              </div>
-              {/* Template Type Selection */}
-{FEATURE_FLAGS.ENABLE_VIDEO_FEATURES ? (
-  <div className="col-span-2 mb-4">
-    <label className="block font-bold text-xl mb-3">
-      Content Type
-    </label>
-    <div className="flex items-center space-x-6">
-      <label className="flex items-center cursor-pointer">
-        <input
-          type="radio"
-          name="templateType"
-          value="video"
-          checked={selectedTemplateType === "video"}
-          onChange={(e) => {
-            setSelectedTemplateType(e.target.value);
-            setFormData(prev => ({ ...prev, template: "" }));
-            setSelectedBrands([]);
-          }}
-          className="mr-3 h-4 w-4 text-blue-600"
-        />
-        <span className="text-lg font-medium">📹 Video Template</span>
-      </label>
-      <label className="flex items-center cursor-pointer">
-        <input
-          type="radio"
-          name="templateType"
-          value="image"
-          checked={selectedTemplateType === "image"}
-          onChange={(e) => {
-            setSelectedTemplateType(e.target.value);
-            setFormData(prev => ({ ...prev, template: "" }));
-            setSelectedBrands([]);
-          }}
-          className="mr-3 h-4 w-4 text-blue-600"
-        />
-        <span className="text-lg font-medium">🖼️ Image Template</span>
-      </label>
-    </div>
-  </div>
-) : (
-  <input type="hidden" name="templateType" value="image" />
-)}
-
-              <div>
-  <label className="block font-bold text-xl mb-2">
-    Choose {FEATURE_FLAGS.ENABLE_VIDEO_FEATURES ? 
-      (selectedTemplateType === "video" ? "Video" : "Image") : 
-      ""} Template
-  </label>
-  <select
-    value={formData.template}
-    onChange={(e) => {
-  handleInputChange(e);
-  if (e.target.value) {
-    setShowTemplatePreview(true);
-    setTimeout(() => setShowTemplatePreview(false), 4000);
-  }
-}}
-    name="template"
-    className={`w-full border ${errors.template ? "border-red-500" : "border-gray-300"
-      } rounded-md px-4 py-2 mb-1`}
-  >
-    <option value="">
-      Select {FEATURE_FLAGS.ENABLE_VIDEO_FEATURES ? 
-        (selectedTemplateType === "video" ? "Video" : "Image") : 
-        ""} Template
-    </option> 
-{templateList
-  .filter(template => template.template_type === 'image')
-  .map((list) => (
-    <option value={list.id} key={list.id}>
-      {list.name}
-    </option>
-  ))}
-                </select>
-
-                {/* ADD TEMPLATE PREVIEW FOR IMAGE TEMPLATES */}
-                {/* ADD TEMPLATE PREVIEW FOR IMAGE TEMPLATES */}
-{formData.template && showTemplatePreview && (
-  <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded-md transition-all duration-500">
-    <div className="text-sm font-medium text-blue-700 mb-2">Template Preview:</div>
-    {(() => {
-      const templatePositions = getTemplatePositionsPreview(formData.template);
-      const selectedTemplate = templateList.find(t => t.id === parseInt(formData.template));
-
-      if (!templatePositions) {
-        return <div className="text-red-500 text-xs">No positioning data available</div>;
-      }
-
-      const brandSettings = selectedTemplate?.brand_area_settings;
-
-      return (
-        <div className="space-y-1 text-xs">
-          <div>Custom Text: "{selectedTemplate?.custom_text || 'Not set'}"</div>
-          <div>Positions configured for: {Object.keys(templatePositions).join(", ")}</div>
-          {brandSettings && brandSettings.enabled && (
-<div className="text-purple-600">
-  Brand logos will be: {brandSettings.brandWidth || 100} × {brandSettings.brandHeight || 60} pixels
-</div>
-)}
-<div className="text-green-600">This template will use your Gallery positioning</div>
-        </div>
-      );
-    })()}
-  </div>
-)}
-                {errors.template && (
-                  <p className="text-red-500 text-sm">{errors.template}</p>
-                )}
-              </div>
-            </div>
-
-              {/* Brand Selection by Category - Only for Image Templates */}
-           {formData.template && (
-  <div className="col-span-2 mb-4">
-    <label className="block font-bold text-xl mb-3">
-      Select Brands (Optional)
-    </label>
-                <div className="space-y-4">
-                  {brandCategories.map((category) => (
-                    <div key={category.category_key} className="border border-gray-200 rounded-lg p-4">
-                      <h4 className="font-semibold text-lg mb-3 text-green-700">
-                        {category.category_name}
-                      </h4>
-                      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-                        {category.brands.map((brand) => (
-                          <label key={brand.id} className="flex items-center space-x-2 cursor-pointer">
-                            <input
-                              type="checkbox"
-                              checked={selectedBrands.includes(brand.id)}
-                              onChange={(e) => handleBrandSelection(brand.id, e.target.checked)}
-                              className="form-checkbox h-4 w-4 text-blue-600"
-                            />
-                            <img
-                              src={brand.brand_image}
-                              alt={brand.name}
-                              className="w-8 h-8 object-contain"
-                            />
-                            <span className="text-sm">{brand.name}</span>
-                          </label>
-                        ))}
-                      </div>
-                    </div>
-                  ))}
+              {/* State */}
+              <div className="flex gap-3">
+                <div>
+                  <label className="block mb-2 font-bold text-xl">State</label>
+                  <input
+                    type="text"
+                    name="state"
+                    placeholder="Enter state"
+                    className={`w-full border ${errors.state ? "border-red-500" : "border-gray-300"
+                      } rounded-md px-4 py-2 mb-1`}
+                    value={formData.state}
+                    onChange={handleInputChange}
+                  />
+                  {errors.state && (
+                    <p className="text-red-500 text-sm">{errors.state}</p>
+                  )}
                 </div>
-                {selectedBrands.length > 0 && (
-                  <div className="mt-3 p-2 bg-green-50 border border-green-200 rounded">
-                    <span className="text-green-700 font-medium">
-                      Selected: {selectedBrands.length} brand(s)
-                    </span>
-                  </div>
-                )}
+                {/* City */}
+                <div>
+                  <label className="block mb-2 font-bold text-xl">City</label>
+                  <input
+                    type="text"
+                    name="city"
+                    placeholder="Enter city"
+                    className={`w-full border ${errors.city ? "border-red-500" : "border-gray-300"
+                      } rounded-md px-4 py-2 mb-1`}
+                    value={formData.city}
+                    onChange={handleInputChange}
+                  />
+                  {errors.city && (
+                    <p className="text-red-500 text-sm">{errors.city}</p>
+                  )}
+                </div>
               </div>
-            )}
 
-
-            {/* State */}
-            <div className="flex gap-3">
-              <div>
-                <label className="block mb-2 font-bold text-xl">State</label>
-                <input
-                  type="text"
-                  name="state"
-                  placeholder="Enter state"
-                  className={`w-full border ${errors.state ? "border-red-500" : "border-gray-300"
-                    } rounded-md px-4 py-2 mb-1`}
-                  value={formData.state}
-                  onChange={handleInputChange}
-                />
-                {errors.state && (
-                  <p className="text-red-500 text-sm">{errors.state}</p>
-                )}
+              {/* Doctor Name */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block font-bold text-xl mb-2">
+                    Doctor Full Name
+                  </label>
+                  <input
+                    type="text"
+                    name="doctorName"
+                    placeholder="Enter full name"
+                    className={`w-full border ${errors.specialization_key ? "border-red-500" : "border-gray-300"
+                      } rounded-md px-4 py-2 mb-1`}
+                    value={formData.doctorName}
+                    onChange={handleInputChange}
+                  />
+                  {errors.doctorName && (
+                    <p className="text-red-500 text-sm">{errors.doctorName}</p>
+                  )}
+                </div>
+                <div></div> {/* Empty div to take up the second column */}
               </div>
-              {/* City */}
-              <div>
-                <label className="block mb-2 font-bold text-xl">City</label>
-                <input
-                  type="text"
-                  name="city"
-                  placeholder="Enter city"
-                  className={`w-full border ${errors.city ? "border-red-500" : "border-gray-300"
-                    } rounded-md px-4 py-2 mb-1`}
-                  value={formData.city}
-                  onChange={handleInputChange}
-                />
-                {errors.city && (
-                  <p className="text-red-500 text-sm">{errors.city}</p>
-                )}
-              </div>
-            </div>
 
-{/* Doctor Name */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block font-bold text-xl mb-2">
-                  Doctor Full Name
-                </label>
-                <input
-                  type="text"
-                  name="doctorName"
-                  placeholder="Enter full name"
-                  className={`w-full border ${errors.specialization_key ? "border-red-500" : "border-gray-300"
-                    } rounded-md px-4 py-2 mb-1`}
-                  value={formData.doctorName}
-                  onChange={handleInputChange}
-                />
-                {errors.doctorName && (
-                  <p className="text-red-500 text-sm">{errors.doctorName}</p>
-                )}
-              </div>
-              <div></div> {/* Empty div to take up the second column */}
-            </div>
-
-            {/* Description */}
-            {/* <div>
+              {/* Description */}
+              {/* <div>
                             <label className="block font-bold text-xl mb-2">Description</label>
                             <textarea
                                 name="description"
@@ -915,27 +895,27 @@ useEffect(() => {
                             />
                         </div> */}
 
-            <button
-              type="submit"
-              className="border-2 px-5 bg-blue-900 text-white py-3 rounded font-bold hover:bg-blue-800 transition-colors flex items-center justify-center gap-2"
-              disabled={isSubmitting}
-            >
-              {isSubmitting ? (
-                <>
-                  <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
-                  Creating {selectedTemplateType}...
-                </>
-              ) : (
-                <>
-                  {selectedTemplateType === "video" ? "🎬" : "🖼️"}
-                  Create {selectedTemplateType === "video" ? "Video" : "Image"} Content
-                </>
-              )}
-            </button>
+              <button
+                type="submit"
+                className="border-2 px-5 bg-blue-900 text-white py-3 rounded font-bold hover:bg-blue-800 transition-colors flex items-center justify-center gap-2"
+                disabled={isSubmitting}
+              >
+                {isSubmitting ? (
+                  <>
+                    <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+                    Creating {selectedTemplateType}...
+                  </>
+                ) : (
+                  <>
+                    {selectedTemplateType === "video" ? "🎬" : "🖼️"}
+                    Create {selectedTemplateType === "video" ? "Video" : "Image"} Content
+                  </>
+                )}
+              </button>
 
-            {apiError && <div className="text-red-500 mt-2">{apiError}</div>}
-          </form>
-        </div>
+              {apiError && <div className="text-red-500 mt-2">{apiError}</div>}
+            </form>
+          </div>
         </div>
 
         {/* Right - Centered Content */}
@@ -945,18 +925,16 @@ useEffect(() => {
             alt="Logo"
             className="w-auto h-15 object-cover mb-8"
           />
-          
-          <div className={`px-6 py-3 rounded-lg text-lg font-bold text-white mb-6 ${
-            selectedTemplateType === "video" ? "bg-blue-600" : "bg-green-600"
-          }`}>
+
+          <div className={`px-6 py-3 rounded-lg text-lg font-bold text-white mb-6 ${selectedTemplateType === "video" ? "bg-blue-600" : "bg-green-600"
+            }`}>
             {selectedTemplateType === "video" ? "Video Template" : "Image Template"}
           </div>
 
-          <div className={`bg-white border p-4 rounded-md text-sm space-y-2 max-w-sm ${
-            selectedTemplateType === "video" 
-              ? "border-red-300 text-red-600" 
+          <div className={`bg-white border p-4 rounded-md text-sm space-y-2 max-w-sm ${selectedTemplateType === "video"
+              ? "border-red-300 text-red-600"
               : "border-green-300 text-green-600"
-          }`}>
+            }`}>
             <div className="font-bold mb-2">
               {selectedTemplateType === "video" ? "Video Template Rules:" : "Image Template Rules:"}
             </div>

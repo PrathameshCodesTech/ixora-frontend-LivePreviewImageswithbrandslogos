@@ -39,31 +39,37 @@ const Create = () => {
     </div>
 
     {/* Tabs */}
-    <div className="flex space-x-8 border-b border-gray-300 mx-5x md:mx-15 mb-6  wrap-anywhere">
-      
-      <button className="pb-2 border-b-2 border-black text-black font-bold">
-        My Images
-      </button>
-      <button onClick={()=>navigate('/gallery')} className="pb-2 text-gray-500 font-bold cursor-pointer">Templates</button>
-      {isAdmin  &&(
-        <>
-        
-      <button onClick={()=>navigate('/employee-create')}  className="pb-2 text-gray-500 font-bold cursor-pointer">Employees</button>
-      
-     
-       <button onClick={()=>navigate('/dashboard')} className="pb-2 text-gray-500 font-bold cursor-pointer">
-        Dashboard
-      </button>
-      
+{/* Tabs */}
+<div className="flex space-x-8 border-b border-gray-300 mx-5x md:mx-15 mb-6  wrap-anywhere">
+  
+  <button className="pb-2 border-b-2 border-black text-black font-bold">
+    My Images
+  </button>
+  <button onClick={()=>navigate('/gallery')} className="pb-2 text-gray-500 font-bold cursor-pointer">Templates</button>
+  {isAdmin  &&(
+    <>
+    
+  <button onClick={()=>navigate('/employee-create')}  className="pb-2 text-gray-500 font-bold cursor-pointer">Employees</button>
+  
+ 
+   <button onClick={()=>navigate('/dashboard')} className="pb-2 text-gray-500 font-bold cursor-pointer">
+    Dashboard
+  </button>
+  
+   <button onClick={()=>navigate('/doctors')} className="pb-2 text-gray-500 font-bold cursor-pointer">
+    Doctor
+  </button>
 
-        </>
-      )}
-      <button onClick={()=>navigate('/doctors')} className="pb-2 text-gray-500 font-bold cursor-pointer">
-        Doctor
-      </button>
-      <button onClick={handleLogout} className="pb-2 text-red-500 font-bold cursor-pointer">Log Out</button>
-      
-    </div>
+    </>
+  )}
+  
+  <button onClick={()=>navigate('/shared-doctors')} className="pb-2 text-blue-600 font-bold cursor-pointer">
+    Shared Doctors
+  </button>
+ 
+  <button onClick={handleLogout} className="pb-2 text-red-500 font-bold cursor-pointer">Log Out</button>
+  
+</div>
 
     {/* Cards */}
     <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mx-5 md:mx-15  mt-18">

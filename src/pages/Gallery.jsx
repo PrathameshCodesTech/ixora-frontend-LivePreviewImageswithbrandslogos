@@ -29,6 +29,7 @@ import {
   getAllBrands,
   postBrandPosition,
   getTaskStatus,
+  checkDoctorSharedStatus, getDoctorUsageHistory
 } from "../api";
 import logo from "../assets/ixoralogo.png";
 import doctors from "../assets/doctors.png";
@@ -42,6 +43,7 @@ import { FaEye } from "react-icons/fa";
 import { FaSearch } from "react-icons/fa";
 import { IoMdAddCircle } from "react-icons/io";
 import { getItemInLocalStorage } from "../utils/loacalStorage";
+import { jsPDF } from 'jspdf';
 
 // Mock data for video templates
 
@@ -79,9 +81,9 @@ const Gallery = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [selectedDoctorId, setSelectedDoctorId] = useState(null);
-const [searchTerm, setSearchTerm] = useState("");
-const [selectedSpecialization, setSelectedSpecialization] = useState("");
-const [page, setPage] = useState(1);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [selectedSpecialization, setSelectedSpecialization] = useState("");
+  const [page, setPage] = useState(1);
   const [nextPageUrl, setNextPageUrl] = useState(null);
   const [prevPageUrl, setPrevPageUrl] = useState(null);
   const [count, setCount] = useState("");
@@ -115,7 +117,12 @@ const [page, setPage] = useState(1);
   const [selectedDoctorForDelete, setSelectedDoctorForDelete] = useState(null);
   const [selectedContentForDelete, setSelectedContentForDelete] =
     useState(null);
-const [regenerateContentType, setRegenerateContentType] = useState("image");
+  const [regenerateContentType, setRegenerateContentType] = useState("image");
+  const [showUsageModal, setShowUsageModal] = useState(false);
+  const [selectedDoctorHistory, setSelectedDoctorHistory] = useState([]);
+  const [selectedDoctorName, setSelectedDoctorName] = useState("");
+  const [doctorSharedStatus, setDoctorSharedStatus] = useState({});
+  const employeeId = getItemInLocalStorage("UserId")?.replace(/"/g, '');
 
   const debugTokens = () => {
     console.log("🔍 =====FULL TOKEN DEBUG=====");
@@ -147,32 +154,32 @@ const [regenerateContentType, setRegenerateContentType] = useState("image");
 
   const itemsPerPage = 10;
   const totalPages = Math.ceil(count / itemsPerPage);
-const fetchDoctorsData = async (signal) => {
-  try {
-    setLoading(true);
-    let response;
+  const fetchDoctorsData = async (signal) => {
+    try {
+      setLoading(true);
+      let response;
 
-    // Check if request was aborted
-    if (signal?.aborted) return;
+      // Check if request was aborted
+      if (signal?.aborted) return;
 
-    // Build query parameters
-    const params = new URLSearchParams();
-    params.append('page', page);
-    if (searchTerm) {
-      params.append('search', searchTerm);
-    }
-    if (selectedSpecialization) {
-      params.append('specialization', selectedSpecialization);
-    }
+      // Build query parameters
+      const params = new URLSearchParams();
+      params.append('page', page);
+      if (searchTerm) {
+        params.append('search', searchTerm);
+      }
+      if (selectedSpecialization) {
+        params.append('specialization', selectedSpecialization);
+      }
 
-    if (USERTYPE === "Admin") {
-      response = await getAllDoctors(page, searchTerm, selectedSpecialization);
-    } else {
-      response = await getAllDoctorsVideosByEmployee(EMPID, page, searchTerm, selectedSpecialization);
-    }
+      if (USERTYPE === "Admin") {
+        response = await getAllDoctors(page, searchTerm, selectedSpecialization);
+      } else {
+        response = await getAllDoctorsVideosByEmployee(EMPID, page, searchTerm, selectedSpecialization);
+      }
 
-    // Check again before setting state
-    if (signal?.aborted) return;
+      // Check again before setting state
+      if (signal?.aborted) return;
 
       // ADD THIS DEBUG FOR IMAGE REGENERATION:
       console.log("🔍 =====IMAGE REGENERATION DEBUG=====");
@@ -244,7 +251,21 @@ const fetchDoctorsData = async (signal) => {
       });
       console.log("🔍 ==============================");
 
-      setDoctorsData(response.results);
+      // Sort by latest content creation (either doctor creation or latest image creation)
+      const sortedResults = response.results.sort((a, b) => {
+        // Get the most recent activity date for each doctor
+        const getLatestActivityDate = (doctor) => {
+          const doctorCreated = new Date(doctor.created_at);
+          const latestImageDate = doctor.latest_output_image && doctor.latest_output_image.length > 0
+            ? new Date(doctor.latest_output_image[0].created_at)
+            : doctorCreated;
+
+          return latestImageDate > doctorCreated ? latestImageDate : doctorCreated;
+        };
+
+        return getLatestActivityDate(b) - getLatestActivityDate(a); // Most recent activity first
+      });
+      setDoctorsData(sortedResults);
       setNextPageUrl(response.next);
       setPrevPageUrl(response.previous);
       setCount(response.count);
@@ -257,17 +278,38 @@ const fetchDoctorsData = async (signal) => {
   };
 
   useEffect(() => {
-  const controller = new AbortController();
-  
-  const delayedSearch = setTimeout(() => {
-    fetchDoctorsData(controller.signal);
-  }, 500);
+    const controller = new AbortController();
 
-  return () => {
-    clearTimeout(delayedSearch);
-    controller.abort();
-  };
-}, [searchTerm, selectedSpecialization, page, USERTYPE, EMPID]);
+    const delayedSearch = setTimeout(() => {
+      fetchDoctorsData(controller.signal);
+    }, 500);
+
+    return () => {
+      clearTimeout(delayedSearch);
+      controller.abort();
+    };
+  }, [searchTerm, selectedSpecialization, page, USERTYPE, EMPID]);
+
+
+  useEffect(() => {
+    const checkAllDoctorsSharedStatus = async () => {
+      if (doctorsData.length > 0) {
+        const statusChecks = doctorsData.map(async (doctor) => {
+          const status = await checkDoctorSharedStatus(doctor.id, employeeId);
+          return { doctorId: doctor.id, ...status };
+        });
+
+        const statuses = await Promise.all(statusChecks);
+        const statusMap = {};
+        statuses.forEach(status => {
+          statusMap[status.doctorId] = status;
+        });
+        setDoctorSharedStatus(statusMap);
+      }
+    };
+
+    checkAllDoctorsSharedStatus();
+  }, [doctorsData, employeeId]);
 
   const handleNextPage = () => {
     if (nextPageUrl) setPage((prev) => prev + 1);
@@ -304,42 +346,21 @@ const fetchDoctorsData = async (signal) => {
   const location = useLocation();
 
   useEffect(() => {
-    // Handle success messages from content creation
+    // Refresh data when returning from content creation to show updated doctor first
     const { state } = location;
 
-    // ADD DEBUGGING
-    console.log("🔍 =====GALLERY SUCCESS HANDLER=====");
-    console.log("🔍 Location state:", state);
-    console.log("🔍 Content type:", state?.contentType);
-    console.log("🔍 Created content:", state?.createdContent);
-    console.log("🔍 ===================================");
-
-    if (state?.createdContent && state?.contentType) {
-      const contentType = state.contentType;
-      const content = state.createdContent;
-
-      // Show appropriate success message
-      if (contentType === "video") {
-        toast.success(
-          `🎬 Video created successfully for Dr. ${content.name || "Unknown"}!`
-        );
-      } else if (contentType === "image") {
-        toast.success(
-          `🖼️ Image created successfully for Dr. ${content.doctor_info?.name || content.doctor_name || "Unknown"
-          }!`
-        );
-      }
-
-      // Clear the state to prevent re-showing message on refresh
+    if (state && (state.createdContent || state.contentType)) {
+      // Clear the state and refresh data to show the updated doctor first
       navigate(location.pathname, { replace: true, state: {} });
 
-      // Refresh the doctor data to show the new content
-      console.log("🔍 Refreshing doctor data after content creation...");
-      fetchDoctorsData();
+      // Small delay to ensure state is cleared before refresh
+      setTimeout(() => {
+        fetchDoctorsData();
+      }, 100);
     }
   }, [location, navigate]);
-const [showSpecializationFilter, setShowSpecializationFilter] =
-  useState(false);
+  const [showSpecializationFilter, setShowSpecializationFilter] =
+    useState(false);
   const getUniqueSpecializations = () => {
     const specializations = new Set();
     doctorsData.forEach((doctor) => {
@@ -353,8 +374,8 @@ const [showSpecializationFilter, setShowSpecializationFilter] =
   const displayDoctors = doctorsData || [];
 
   // If there's a search term, filter the current page data (you'll need to modify backend to handle search)
-// Use doctorsData directly since backend handles filtering and pagination
-const currentRows = doctorsData || [];
+  // Use doctorsData directly since backend handles filtering and pagination
+  const currentRows = doctorsData || [];
 
   const fetchDownloadDoctorData = async () => {
     try {
@@ -404,16 +425,16 @@ const currentRows = doctorsData || [];
     setTemplateType("image"); // Set to image mode
   };
 
-const [isRegeneratingImage, setIsRegeneratingImage] = useState(false);
+  const [isRegeneratingImage, setIsRegeneratingImage] = useState(false);
 
-const handleRecreateImage = async () => {
-  if (!selectedTemplate) {
-    return toast.error("Please select image template");
-  }
-  
-  setIsRegeneratingImage(true);
-  try {
-    toast.loading("Loading template details...", { id: "template-load" });
+  const handleRecreateImage = async () => {
+    if (!selectedTemplate) {
+      return toast.error("Please select image template");
+    }
+
+    setIsRegeneratingImage(true);
+    try {
+      toast.loading("Loading template details...", { id: "template-load" });
       const templateDetails = await getTemplatesDetailsById(selectedTemplate);
       toast.dismiss("template-load");
 
@@ -459,42 +480,42 @@ const handleRecreateImage = async () => {
         !!uploadedDoctorImage
       );
 
-const response = await generateImageContent(formData);
-setIsRecreateImageModalOpen(false);
-setUploadedDoctorImage(null); // Reset after use
+      const response = await generateImageContent(formData);
+      setIsRecreateImageModalOpen(false);
+      setUploadedDoctorImage(null); // Reset after use
 
-// Handle async image processing
-if (response.status === "processing" && response.task_id) {
-  const pollTaskStatus = async (taskId) => {
-    try {
-      const statusData = await getTaskStatus(taskId);
-      
-      if (statusData.status === "completed") {
+      // Handle async image processing
+      if (response.status === "processing" && response.task_id) {
+        const pollTaskStatus = async (taskId) => {
+          try {
+            const statusData = await getTaskStatus(taskId);
+
+            if (statusData.status === "completed") {
+              toast.success("Image created successfully!", { id: "recreate-image" });
+              fetchDoctorsData();
+            } else if (statusData.status === "failed") {
+              toast.error("Image creation failed", { id: "recreate-image" });
+            } else {
+              setTimeout(() => pollTaskStatus(taskId), 2000);
+            }
+          } catch (error) {
+            toast.error("Error checking image status", { id: "recreate-image" });
+          }
+        };
+
+        pollTaskStatus(response.task_id);
+      } else if (response && response.output_image_url) {
         toast.success("Image created successfully!", { id: "recreate-image" });
         fetchDoctorsData();
-      } else if (statusData.status === "failed") {
-        toast.error("Image creation failed", { id: "recreate-image" });
       } else {
-        setTimeout(() => pollTaskStatus(taskId), 2000);
+        throw new Error("Failed to create image");
       }
     } catch (error) {
-      toast.error("Error checking image status", { id: "recreate-image" });
+      console.error("Image creation error:", error);
+      toast.error("Failed to create image", { id: "recreate-image" });
+    } finally {
+      setIsRegeneratingImage(false);
     }
-  };
-  
-  pollTaskStatus(response.task_id);
-} else if (response && response.output_image_url) {
-  toast.success("Image created successfully!", { id: "recreate-image" });
-  fetchDoctorsData();
-} else {
-  throw new Error("Failed to create image");
-}
-    } catch (error) {
-  console.error("Image creation error:", error);
-  toast.error("Failed to create image", { id: "recreate-image" });
-} finally {
-  setIsRegeneratingImage(false);
-}
   };
 
   const handleRecreateVideo = async () => {
@@ -641,7 +662,7 @@ if (response.status === "processing" && response.task_id) {
 
   const [status, setStatus] = useState(false);
 
-const [templateType, setTemplateType] = useState("image");
+  const [templateType, setTemplateType] = useState("image");
   const [imageTemplates, setImageTemplates] = useState([]);
   const [selectedTemplateType, setSelectedTemplateType] = useState("image");
   const [imageFormData, setImageFormData] = useState({
@@ -662,7 +683,7 @@ const [templateType, setTemplateType] = useState("image");
   //   }
   // };
 
-const fetchActiveTemplatesList = async (newStatus) => {
+  const fetchActiveTemplatesList = async (newStatus) => {
     try {
       const imageRes = await getImageTemplates();
       setListTemplate(imageRes);  // Use image templates for both
@@ -676,9 +697,9 @@ const fetchActiveTemplatesList = async (newStatus) => {
     fetchActiveTemplatesList();
   }, []);
 
-const fetchFilteredTemplatesList = async (newStatus) => {
+  const fetchFilteredTemplatesList = async (newStatus) => {
     try {
-      let apiParams = { 
+      let apiParams = {
         template_type: 'image',  // Force image templates only
         user_type: USERTYPE,
         employee_id: EMPID
@@ -702,31 +723,31 @@ const fetchFilteredTemplatesList = async (newStatus) => {
   useEffect(() => {
     fetchFilteredTemplatesList(status);
   }, [tabs]);
-useEffect(() => {
+  useEffect(() => {
     setSelectedTemplateType("image");
     fetchFilteredTemplatesList(status);
   }, []);
 
-useEffect(() => {
-  return () => {
-    // Cleanup intervals
-    const intervals = [window.pollInterval, window.statusInterval];
-    intervals.forEach(interval => {
-      if (interval) clearInterval(interval);
-    });
-    
-    // Cleanup preview window
-    if (window.livePreviewWindow && !window.livePreviewWindow.closed) {
-      window.livePreviewWindow.close();
-      window.livePreviewWindow = null;
-    }
-    
-    // Cleanup any pending timeouts
-    if (window.taskStatusTimeout) {
-      clearTimeout(window.taskStatusTimeout);
-    }
-  };
-}, []);
+  useEffect(() => {
+    return () => {
+      // Cleanup intervals
+      const intervals = [window.pollInterval, window.statusInterval];
+      intervals.forEach(interval => {
+        if (interval) clearInterval(interval);
+      });
+
+      // Cleanup preview window
+      if (window.livePreviewWindow && !window.livePreviewWindow.closed) {
+        window.livePreviewWindow.close();
+        window.livePreviewWindow = null;
+      }
+
+      // Cleanup any pending timeouts
+      if (window.taskStatusTimeout) {
+        clearTimeout(window.taskStatusTimeout);
+      }
+    };
+  }, []);
 
   const handleTabs = (tab) => {
     setTabs(tab);
@@ -826,7 +847,7 @@ useEffect(() => {
   const [videoData, setVideoData] = useState({});
   const [imageData, setImageData] = useState({});
 
-  const toggleVideoData = async (doctorId) => {
+  const toggleImageData = async (doctorId) => {
     const isCurrentlyExpanded = expandedRows[doctorId] || false;
     const isExpanding = !isCurrentlyExpanded;
 
@@ -836,27 +857,8 @@ useEffect(() => {
       [doctorId]: isExpanding,
     }));
 
-    // Fetch both video and image data when expanding
+    // Fetch only image data when expanding
     if (isExpanding) {
-      // Fetch video data if not already loaded
-      if (!videoData[doctorId]) {
-        try {
-          const videoResponse = await getGeneratedDoctorVideos(doctorId);
-          console.log("Video data for doctor", doctorId, ":", videoResponse);
-          setVideoData((prev) => ({
-            ...prev,
-            [doctorId]: videoResponse,
-          }));
-        } catch (error) {
-          console.error("Error fetching video data:", error);
-          setVideoData((prev) => ({
-            ...prev,
-            [doctorId]: [], // Set empty array on error
-          }));
-        }
-      }
-
-      // Fetch image data if not already loaded
       if (!imageData[doctorId]) {
         try {
           const imageResponse = await getGeneratedDoctorImages(doctorId);
@@ -1392,20 +1394,20 @@ useEffect(() => {
                   Cancel
                 </button>
                 <button
-  type="button"
-  onClick={handleRecreateImage}
-  className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
-  disabled={!selectedTemplate || isRegeneratingImage}
->
-  {isRegeneratingImage ? (
-    <>
-      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white inline-block mr-2"></div>
-      Creating...
-    </>
-  ) : (
-    "Create Image"
-  )}
-</button>
+                  type="button"
+                  onClick={handleRecreateImage}
+                  className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                  disabled={!selectedTemplate || isRegeneratingImage}
+                >
+                  {isRegeneratingImage ? (
+                    <>
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white inline-block mr-2"></div>
+                      Creating...
+                    </>
+                  ) : (
+                    "Create Image"
+                  )}
+                </button>
               </div>
             </div>
           </div>
@@ -1520,35 +1522,35 @@ useEffect(() => {
               </button>
               <button
                 onClick={async () => {
-  try {
-    toast.loading("Deleting doctor...", { id: "delete-doctor" });
+                  try {
+                    toast.loading("Deleting doctor...", { id: "delete-doctor" });
 
-    const employeeId = getItemInLocalStorage("UserId")?.replace(/"/g, "");
-    
-    if (!employeeId) {
-      toast.error("Employee ID not found", { id: "delete-doctor" });
-      return;
-    }
+                    const employeeId = getItemInLocalStorage("UserId")?.replace(/"/g, "");
 
-    await deleteDoctor(selectedDoctorForDelete.id, {
-      employee_id: employeeId
-    });
+                    if (!employeeId) {
+                      toast.error("Employee ID not found", { id: "delete-doctor" });
+                      return;
+                    }
 
-    toast.success(
-      `${selectedDoctorForDelete.name} deleted successfully!`,
-      { id: "delete-doctor" }
-    );
-    
-    setIsDeleteConfirmModalOpen(false);
-    setSelectedDoctorForDelete(null);
-    fetchDoctorsData();
-  } catch (error) {
-    console.error("Delete error:", error);
-    toast.error(error.message || "Failed to delete doctor", {
-      id: "delete-doctor"
-    });
-  }
-}}
+                    await deleteDoctor(selectedDoctorForDelete.id, {
+                      employee_id: employeeId
+                    });
+
+                    toast.success(
+                      `${selectedDoctorForDelete.name} deleted successfully!`,
+                      { id: "delete-doctor" }
+                    );
+
+                    setIsDeleteConfirmModalOpen(false);
+                    setSelectedDoctorForDelete(null);
+                    fetchDoctorsData();
+                  } catch (error) {
+                    console.error("Delete error:", error);
+                    toast.error(error.message || "Failed to delete doctor", {
+                      id: "delete-doctor"
+                    });
+                  }
+                }}
                 className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700"
               >
                 Delete Permanently
@@ -1738,11 +1740,11 @@ useEffect(() => {
       </nav>
 
       <div className="mt-15 mb-10">
-     <h1 className="text-3xl font-bold text-gray-900 mb-2">
-  {viewMode === "gallery" && USERTYPE === "Admin"
-    ? "Image Template Gallery"
-    : "Doctor Data"}
-    </h1>
+        <h1 className="text-3xl font-bold text-gray-900 mb-2">
+          {viewMode === "gallery" && USERTYPE === "Admin"
+            ? "Image Template Gallery"
+            : "Doctor Data"}
+        </h1>
         <p className="text-gray-600 font-semibold text-lg">
           {viewMode === "gallery" && USERTYPE === "Admin"
             ? "Choose a template to start your next project."
@@ -2073,15 +2075,15 @@ useEffect(() => {
                 <FaSearch size={20} />
               </div>
               <input
-  type="text"
-  placeholder="Search by doctor name..."
-  value={searchTerm}
-  onChange={(e) => {
-    setSearchTerm(e.target.value);
-    setPage(1); // Reset to first page when searching
-  }}
-  className="border border-gray-300 rounded px-3 py-1 ml-4 w-64"
-/>
+                type="text"
+                placeholder="Search by doctor name..."
+                value={searchTerm}
+                onChange={(e) => {
+                  setSearchTerm(e.target.value);
+                  setPage(1); // Reset to first page when searching
+                }}
+                className="border border-gray-300 rounded px-3 py-1 ml-4 w-64"
+              />
             </div>
           </div>
 
@@ -2201,7 +2203,7 @@ useEffect(() => {
                       Image
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Share
+                      Download
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Actions
@@ -2217,7 +2219,7 @@ useEffect(() => {
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                           <button
-                            onClick={() => toggleVideoData(doctor.id)}
+                            onClick={() => toggleImageData(doctor.id)}
                             className="text-blue-600 hover:text-blue-800"
                           >
                             <FaEye size={20} />
@@ -2377,84 +2379,121 @@ useEffect(() => {
                           )}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 font-semibold">
-                          {doctor.whatsapp_number && (
-                            <div className="flex items-center space-x-2">
-                              {/* Video Share */}
-                              {FEATURE_FLAGS.ENABLE_VIDEO_FEATURES && doctor.latest_output_video &&
-                                doctor.latest_output_video.length > 0 && (
+                          {doctor.latest_output_image && doctor.latest_output_image.length > 0 ? (
+                            <button
+                              onClick={async () => {
+                                try {
+                                  const imageUrl = getAbsoluteImageUrl(
+                                    doctor.latest_output_image[0]?.output_image_url ||
+                                    doctor.latest_output_image[0]?.output_image
+                                  );
 
-                                  <a href={`https://wa.me/${doctor.whatsapp_number}?text=Check out this video: http://127.0.0.1:8000/${doctor.latest_output_video[0]?.video_file}`}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="text-blue-500 hover:text-blue-700 flex items-center"
-                                    title="Share Video on WhatsApp"
-                                  >
-                                    <FaWhatsapp size={18} />
-                                    <span className="text-xs ml-1">🎬</span>
-                                  </a>
-                                )}
+                                  toast.loading("Preparing PDF download...", { id: "pdf-download" });
 
-                              {/* Image Share */}
-                              {doctor.latest_output_image &&
-                                doctor.latest_output_image.length > 0 && (
+                                  // Fetch the image
+                                  const response = await fetch(imageUrl);
+                                  const blob = await response.blob();
 
-                                  <a href={`https://wa.me/${doctor.whatsapp_number
-                                    }?text=Check out this image: ${doctor.latest_output_image[
-                                      doctor.latest_output_image.length - 1
-                                    ]?.output_image_url ||
-                                    doctor.latest_output_image[
-                                      doctor.latest_output_image.length - 1
-                                    ]?.output_image
-                                    }`}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="text-green-500 hover:text-green-700 flex items-center"
-                                    title="Share Image on WhatsApp"
-                                  >
-                                    <FaWhatsapp size={18} />
-                                  </a>
-                                )}
+                                  // Create image element to get dimensions
+                                  const img = new Image();
+                                  img.onload = () => {
+                                    // Create PDF
+                                    // For even better quality, scale up the image
+                                    const pdf = new jsPDF({
+                                      unit: 'mm',
+                                      format: 'a4',
+                                      compress: false
+                                    });
 
-                              {/* No content available */}
-                              {(!FEATURE_FLAGS.ENABLE_VIDEO_FEATURES || !doctor.latest_output_video ||
-                                doctor.latest_output_video.length === 0) &&
-                                (!doctor.latest_output_image ||
-                                  doctor.latest_output_image.length === 0) && (
-                                  <span
-                                    className="text-gray-400"
-                                    title="No content to share"
-                                  >
-                                    <FaWhatsapp size={18} />
-                                  </span>
-                                )}
-                            </div>
-                          )}
+                                    const scaleFactor = 2; // Double resolution
+                                    const imgWidth = 190;
+                                    const imgHeight = (img.height * imgWidth) / img.width;
 
-                          {/* No WhatsApp number */}
-                          {!doctor.whatsapp_number && (
-                            <span className="text-gray-400 text-xs">
-                              No WhatsApp
-                            </span>
+                                    // Create a canvas to upscale the image
+                                    const canvas = document.createElement('canvas');
+                                    canvas.width = img.width * scaleFactor;
+                                    canvas.height = img.height * scaleFactor;
+                                    const ctx = canvas.getContext('2d');
+                                    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+                                    pdf.addImage(canvas.toDataURL('image/png'), 'PNG', 10, 10, imgWidth, imgHeight, undefined, 'FAST');
+
+                                    // Generate filename with doctor name
+                                    const filename = `${doctor.name.replace(/[^a-zA-Z0-9\s]/g, '').replace(/\s+/g, '_')}.pdf`;
+
+                                    // Download the PDF
+                                    pdf.save(filename);
+
+                                    toast.success(`Downloaded PDF for ${doctor.name}`, { id: "pdf-download" });
+                                  };
+
+                                  // Convert blob to base64 for PDF
+                                  const reader = new FileReader();
+                                  reader.onload = () => {
+                                    img.src = reader.result;
+                                  };
+                                  reader.readAsDataURL(blob);
+
+                                } catch (error) {
+                                  console.error('PDF download error:', error);
+                                  toast.error("Failed to download PDF", { id: "pdf-download" });
+                                }
+                              }}
+                              className="flex items-center px-3 py-1 bg-green-600 text-white rounded-md text-sm hover:bg-green-700 transition"
+                              title="Download as PDF"
+                            >
+                              <FaDownload size={14} />
+                              <span className="ml-1">PDF</span>
+                            </button>
+                          ) : (
+                            <span className="text-gray-400 text-xs">No image</span>
                           )}
                         </td>
-                        {/* ADD THIS NEW ACTIONS COLUMN */}
-<td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-  <div className="flex items-center space-x-3">
-    {/* Delete Button Only */}
-<button
-  onClick={() => {
-    console.log("Deleting doctor:", doctor.name, "ID:", doctor.id);
-    setSelectedDoctorForDelete(doctor);
-    setIsDeleteConfirmModalOpen(true);
-  }}
-      className="flex items-center px-2 py-1 text-red-600 hover:text-red-800 hover:bg-red-50 rounded-md transition-colors"
-      title="Delete Doctor & All Content"
-    >
-      <FaTrash size={14} />
-      <span className="ml-1 text-xs font-medium">Delete</span>
-    </button>
-  </div>
-</td>
+
+                        {/* Actions Column with Green Dot + Delete */}
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                          <div className="flex items-center space-x-3">
+                            {/* Green dot for shared doctors */}
+                            <button
+                              onClick={async () => {
+                                try {
+                                  const sharedStatus = doctorSharedStatus[doctor.id];
+                                  if (sharedStatus?.isShared) {
+                                    const history = await getDoctorUsageHistory(doctor.id, employeeId);
+                                    setSelectedDoctorHistory(history);
+                                    setSelectedDoctorName(doctor.name);
+                                    setShowUsageModal(true);
+                                  } else {
+                                    toast.info("This doctor hasn't been used by other employees");
+                                  }
+                                } catch (error) {
+                                  toast.error("Failed to load usage history");
+                                }
+                              }}
+                              className={`w-4 h-4 rounded-full ${doctorSharedStatus[doctor.id]?.isShared ? 'bg-green-500 hover:bg-green-600' : 'bg-gray-300'
+                                } transition-colors`}
+                              title={
+                                doctorSharedStatus[doctor.id]?.isShared
+                                  ? "Click to see which employees used this doctor"
+                                  : "Not shared with other employees"
+                              }
+                            />
+
+                            {/* Delete Button */}
+                            <button
+                              onClick={() => {
+                                console.log("Deleting doctor:", doctor.name, "ID:", doctor.id);
+                                setSelectedDoctorForDelete(doctor);
+                                setIsDeleteConfirmModalOpen(true);
+                              }}
+                              className="flex items-center px-2 py-1 text-red-600 hover:text-red-800 hover:bg-red-50 rounded-md transition-colors"
+                              title="Delete Doctor & All Content"
+                            >
+                              <FaTrash size={14} />
+                              <span className="ml-1 text-xs font-medium">Delete</span>
+                            </button>
+                          </div>
+                        </td>
                       </tr>
 
                       {
@@ -2462,87 +2501,6 @@ useEffect(() => {
                           <tr className="bg-gray-50">
                             <td colSpan={15} className="px-6 py-4">
                               <div className="flex flex-col space-y-4">
-                                {videoData[doctor.id] ? (
-                                  videoData[doctor.id].length > 0 ? (
-                                    [...videoData[doctor.id]]
-                                      .sort(
-                                        (a, b) =>
-                                          new Date(b.created_at) -
-                                          new Date(a.created_at)
-                                      )
-                                      .map((video) => (
-                                        <div
-                                          key={video.id}
-                                          className="flex items-center justify-between p-4 bg-white rounded-lg shadow"
-                                        >
-                                          <div>
-                                            <p className="font-medium">
-                                              Video ID: {video.id}
-                                            </p>
-                                            <p className="text-sm text-gray-500 font-bold">
-                                              Created:{" "}
-                                              {new Date(
-                                                video.created_at
-                                              ).toLocaleString()}
-                                            </p>
-                                          </div>
-                                          <div className="flex space-x-3">
-                                            {video.video_file ? (
-                                              <>
-                                                <button
-                                                  onClick={() => {
-                                                    // const videoUrl = `http://api.videomaker.digielvestech.in${video.video_file}`;
-                                                    const videoUrl = `http://127.0.0.1:8000/${video.video_file}`;
-                                                    navigator.clipboard.writeText(
-                                                      videoUrl
-                                                    );
-                                                    toast.success(
-                                                      "Video link copied!"
-                                                    );
-                                                  }}
-                                                  className="px-3 py-1 font-bold bg-blue-100 text-blue-800 rounded-md hover:bg-blue-200 text-sm"
-                                                >
-                                                  Copy Link
-                                                </button>
-                                                <a
-                                                  // href={`http://api.videomaker.digielvestech.in${video.video_file}`}
-                                                  href={`http://127.0.0.1:8000/${video.video_file}`}
-                                                  target="_blank"
-                                                  rel="noopener noreferrer"
-                                                  className="px-3 py-1 font-bold bg-green-100 text-green-800 rounded-md hover:bg-green-200 text-sm"
-                                                >
-                                                  View Video
-                                                </a>
-                                                <a
-                                                  href={`https://wa.me/`}
-                                                  target="_blank"
-                                                  rel="noopener noreferrer"
-                                                  className="text-green-500 hover:text-green-700"
-                                                >
-                                                  <FaWhatsapp size={20} />
-                                                </a>
-                                              </>
-                                            ) : (
-                                              <span className="text-yellow-600 text-sm flex items-center">
-                                                Video not available
-                                              </span>
-                                            )}
-                                          </div>
-                                        </div>
-                                      ))
-                                  ) : (
-                                    <div className="text-center py-4 text-gray-500">
-                                      No videos found for this doctor
-                                    </div>
-                                  )
-                                ) : (
-                                  <div className="text-center py-4">
-                                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-800 mx-auto"></div>
-                                    <p className="mt-2">
-                                      Loading video details...
-                                    </p>
-                                  </div>
-                                )}
                               </div>
                               {/* Image Content Section */}
                               <div>
@@ -2682,8 +2640,8 @@ useEffect(() => {
                   key={pageNumber}
                   onClick={() => setPage(pageNumber)}
                   className={`px-4 py-1 rounded ${pageNumber === page
-                      ? "bg-blue-500 text-white font-semibold shadow"
-                      : "bg-gray-200"
+                    ? "bg-blue-500 text-white font-semibold shadow"
+                    : "bg-gray-200"
                     }`}
                 >
                   {pageNumber}
@@ -2709,9 +2667,50 @@ useEffect(() => {
         </div>
       )
       }
+
+      {/* Usage History Modal */}
+      {showUsageModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 max-w-2xl w-full mx-4 max-h-96 overflow-y-auto">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-lg font-bold">
+                Usage History for "{selectedDoctorName}"
+              </h3>
+              <button
+                onClick={() => setShowUsageModal(false)}
+                className="text-gray-500 hover:text-gray-700 text-xl"
+              >
+                ×
+              </button>
+            </div>
+            <div className="space-y-3">
+              {selectedDoctorHistory.map((history, index) => (
+                <div key={index} className="p-3 bg-gray-50 rounded flex justify-between items-center">
+                  <div>
+                    <div className="font-medium">{history.employee_name}</div>
+                    <div className="text-sm text-gray-500">Template: {history.template_name}</div>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-xs text-gray-500">
+                      {new Date(history.generated_at).toLocaleString()}
+                    </div>
+                    {history.is_current_employee && (
+                      <span className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded-full ml-2">
+                        You
+                      </span>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
     </div >
   );
 };
+
+
 
 const ImageTemplateForm = ({ onSubmit, onCancel }) => {
   const [formData, setFormData] = useState({
@@ -4722,6 +4721,7 @@ const EditDoctorForm = ({ doctor, onSave, onCancel }) => {
 
     onSave(updateData);
   };
+
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">

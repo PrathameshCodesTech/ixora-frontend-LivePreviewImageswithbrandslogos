@@ -29,6 +29,7 @@ import ProtectedAdminRoutes from './routes/ProtectedAdminRoutes';
 import ProtectedStaffRoutes from './routes/ProtectedStaffRoutes';
 import UserDetails from './pages/UserDetails';
 import ErrorBoundary from './pages/ErrorBoundary';
+import SharedDoctors from './pages/SharedDoctors';
 import './App.css'
 import { HashRouter as Router, Routes, Route, Link ,Navigate} from 'react-router-dom'
 
@@ -104,7 +105,7 @@ function App() {
       path='/dashboard'
       element={<ProtectedAdminRoutes><Dashboard/></ProtectedAdminRoutes>}
       />
-
+      <Route path="/shared-doctors" element={<SharedDoctors />} />
       <Route
       path='/employee-details'
       element={<ProtectedAdminRoutes><UserDetails/></ProtectedAdminRoutes>}

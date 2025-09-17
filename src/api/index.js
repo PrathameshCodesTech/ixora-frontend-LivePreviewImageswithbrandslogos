@@ -10,10 +10,43 @@ const BASE_URL = window.location.hostname === 'localhost'
   ? 'http://localhost:8000' 
   : 'https://api.videomaker.digielvestech.in';
 
-// Global axios error handler
+
+// Global axios error handler with token refresh
 axios.interceptors.response.use(
   (response) => response,
-  (error) => {
+  async (error) => {
+    const originalRequest = error.config;
+    
+    // Handle token refresh for 401 errors
+    if (error.response?.status === 401 && !originalRequest._retry) {
+      originalRequest._retry = true;
+      
+      try {
+        const refreshToken = getItemInLocalStorage("Refresh")?.replace(/"/g, '');
+        
+        if (refreshToken) {
+          const response = await axios.post(`${BASE_URL}/token/refresh/`, {
+            refresh: refreshToken
+          });
+          
+          const newAccessToken = response.data.access;
+          setItemInLocalStorage("Access_Token", newAccessToken);
+          
+          // Update the failed request with new token
+          originalRequest.headers.Authorization = `Bearer ${newAccessToken}`;
+          return axios(originalRequest);
+        }
+      } catch (refreshError) {
+        // Refresh failed, redirect to login
+        setItemInLocalStorage("Access_Token", null);
+        setItemInLocalStorage("Refresh", null);
+        toast.error("Session expired. Please login again.");
+        window.location.href = '/login';
+        return Promise.reject(refreshError);
+      }
+    }
+    
+    // Handle other errors
     if (error.response?.status === 429) {
       toast.error("Too many requests. Please wait a moment and try again.");
     } else if (error.response?.status === 500) {
@@ -148,7 +181,7 @@ export const getAllDoctorsVideosByEmployee = async (empId, page = 1, search = ''
   const params = new URLSearchParams({
     page: page.toString(),
     employee_id: empId,
-    user_type: getItemInLocalStorage('UserType')?.replace(/"/g, '') || 'Employee'  // Add user type
+    user_type: getItemInLocalStorage('UserType')?.replace(/"/g, '') || 'Employee'  
   });
   if (search) params.append('search', search);
   if (specialization) params.append('specialization', specialization);
@@ -499,8 +532,12 @@ export const addImageTemplate = async (FormData) => {
 
 export const generateImageContent = async (data) => {
   try {
+    const token = getAuthToken(); // Add this line
     const response = await axios.post(`${BASE_URL}/api/generate-image/`, data, {
-      headers: { 'Content-Type': 'application/json' }
+      headers: { 
+        'Content-Type': 'application/json',
+        'Authorization': token ? `Bearer ${token}` : undefined // Add this line
+      }
     });
     return response.data;
   } catch (error) {
@@ -670,4 +707,57 @@ export const getTaskStatus = async (taskId) => {
 };
 
 
+export const getDoctorUsageHistory = async (doctorId, employeeId) => {
+  try {
+    const token = getAuthToken();
+    const response = await axios.get(`${BASE_URL}/api/doctor-usage-history/`, {
+      params: { doctor_id: doctorId, employee_id: employeeId },
+      headers: {
+        'Authorization': token ? `Bearer ${token}` : undefined,
+        'Content-Type': 'application/json'
+      }
+    });
+    return response.data;
+  } catch (error) {
+    console.log("Error getting doctor usage history", error);
+    throw error;
+  }
+};
 
+export const getSharedDoctors = async (employeeId) => {
+  try {
+    const token = getAuthToken();
+    const response = await axios.get(`${BASE_URL}/api/shared-doctors/`, {
+      params: { employee_id: employeeId },
+      headers: {
+        'Authorization': token ? `Bearer ${token}` : undefined,
+        'Content-Type': 'application/json'
+      }
+    });
+    return response.data;
+  } catch (error) {
+    console.log("Error getting shared doctors", error);
+    throw error;
+  }
+};
+
+export const checkDoctorSharedStatus = async (doctorId, employeeId) => {
+  try {
+    const token = getAuthToken();
+    const response = await axios.get(`${BASE_URL}/api/doctor-usage-history/`, {
+      params: { doctor_id: doctorId, employee_id: employeeId },
+      headers: {
+        'Authorization': token ? `Bearer ${token}` : undefined,
+        'Content-Type': 'application/json'
+      }
+    });
+    const otherEmployeeUsage = response.data.filter(h => !h.is_current_employee);
+    return {
+      isShared: otherEmployeeUsage.length > 0,
+      otherEmployees: otherEmployeeUsage
+    };
+  } catch (error) {
+    console.log("Error checking doctor shared status", error);
+    return { isShared: false, otherEmployees: [] };
+  }
+};
