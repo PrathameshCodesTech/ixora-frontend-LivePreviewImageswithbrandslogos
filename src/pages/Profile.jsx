@@ -256,6 +256,9 @@ const Profile = () => {
     };
   };
 
+  const [isAutoPopulated, setIsAutoPopulated] = useState(false);
+  const [readOnlyFields, setReadOnlyFields] = useState([]);
+
   const handleMobileNumberChange = debounce(async (mobileNumber) => {
     // Clear previous messages
     setDoctorFoundMessage("");
@@ -265,10 +268,13 @@ const Profile = () => {
       setIsSearchingDoctor(true);
 
       try {
-        const response = await searchDoctor(mobileNumber);
+        // Add employee_id to search request
+        const employeeId = getItemInLocalStorage("UserId")?.replace(/"/g, '');
+        const response = await searchDoctor(mobileNumber, employeeId);
 
         if (response.found) {
           const doctor = response.doctor;
+          const readonly_fields = doctor.readonly_fields || [];
 
           // Auto-populate form with existing doctor data
           setFormData(prev => ({
@@ -282,11 +288,21 @@ const Profile = () => {
             // Don't override mobile number as user is typing
           }));
 
-          toast.success(`✅ Doctor found: ${doctor.name} from ${doctor.clinic}`);
+          if (response.own_doctor) {
+            toast.success(`âœ… Your doctor found: ${doctor.name}`);
+            setIsAutoPopulated(false);
+            setReadOnlyFields([]);
+          } else {
+            toast.info(`📋 Auto-filled from existing data. Only mobile number cannot be changed.`);
+            setIsAutoPopulated(true);
+            setReadOnlyFields(['mobileNumber']); 
+          }
           setDoctorFoundMessage("");
         } else {
-          toast.info("🆕 New doctor - please fill details");
+          toast.info("ðŸ†• New doctor - please fill details");
           setDoctorFoundMessage("");
+          setIsAutoPopulated(false);
+          setReadOnlyFields([]);
         }
       } catch (error) {
         console.error("Doctor search error:", error);
@@ -298,7 +314,6 @@ const Profile = () => {
       setIsSearchingDoctor(false);
     }
   }, 1000);
-
 
 
   const handleSubmit = async (e) => {
@@ -435,9 +450,9 @@ const Profile = () => {
 
   const [templateList, setTemplatesList] = useState([]);
 
-  const [selectedTemplateType, setSelectedTemplateType] = useState("image");
-  const [isSearchingDoctor, setIsSearchingDoctor] = useState(false);
-  const [doctorFoundMessage, setDoctorFoundMessage] = useState("");
+const [selectedTemplateType, setSelectedTemplateType] = useState("image");
+const [isSearchingDoctor, setIsSearchingDoctor] = useState(false);
+const [doctorFoundMessage, setDoctorFoundMessage] = useState("");
 
   // ADD THESE LINES:
   const [brandCategories, setBrandCategories] = useState([]);
@@ -555,21 +570,26 @@ const Profile = () => {
                     Mobile Number
                   </label>
                   <div className="relative">
-                    <input
+                      <input
                       type="text"
                       name="mobileNumber"
                       placeholder="Enter mobile number"
+                      readOnly={readOnlyFields.includes('mobileNumber')}
                       className={`w-full border ${errors.mobileNumber ? "border-red-500" : "border-gray-300"
-                        } rounded-md px-4 py-2 ${isSearchingDoctor ? 'pr-10' : ''}`}
+                        } rounded-md px-4 py-2 ${isSearchingDoctor ? 'pr-10' : ''} ${
+                        readOnlyFields.includes('mobileNumber') ? 'bg-gray-100 cursor-not-allowed' : ''
+                      }`}
                       value={formData.mobileNumber}
                       onChange={(e) => {
-                        handleInputChange(e);
-                        handleMobileNumberChange(e.target.value);
-                        if (sameNumber) {
-                          setFormData((prev) => ({
-                            ...prev,
-                            whatsappNumber: e.target.value,
-                          }));
+                        if (!readOnlyFields.includes('mobileNumber')) {
+                          handleInputChange(e);
+                          handleMobileNumberChange(e.target.value);
+                          if (sameNumber) {
+                            setFormData((prev) => ({
+                              ...prev,
+                              whatsappNumber: e.target.value,
+                            }));
+                          }
                         }
                       }}
                     />
@@ -867,17 +887,26 @@ const Profile = () => {
                     Doctor Full Name
                   </label>
                   <input
+        
                     type="text"
                     name="doctorName"
                     placeholder="Enter full name"
+                    readOnly={readOnlyFields.includes('doctorName')}
                     className={`w-full border ${errors.specialization_key ? "border-red-500" : "border-gray-300"
-                      } rounded-md px-4 py-2 mb-1`}
+                      } rounded-md px-4 py-2 mb-1 ${
+                      readOnlyFields.includes('doctorName') ? 'bg-gray-100 cursor-not-allowed' : ''
+                    }`}
                     value={formData.doctorName}
                     onChange={handleInputChange}
                   />
                   {errors.doctorName && (
                     <p className="text-red-500 text-sm">{errors.doctorName}</p>
                   )}
+                  {isAutoPopulated && (
+  <p className="text-blue-600 text-sm mt-1">
+    ℹ️ Data auto-filled. Only mobile number cannot be changed.
+  </p>
+)}
                 </div>
                 <div></div> {/* Empty div to take up the second column */}
               </div>

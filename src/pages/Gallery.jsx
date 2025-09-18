@@ -23,13 +23,13 @@ import {
   searchDoctor,
   getGeneratedDoctorImages,
   updateDoctor, // ADD
-  deleteDoctor, // ADD
+  // deleteDoctor, // ADD
   regenerateContent, // ADD
   deleteContent, // ADD
   getAllBrands,
   postBrandPosition,
   getTaskStatus,
-  checkDoctorSharedStatus, getDoctorUsageHistory
+  // checkDoctorSharedStatus, getDoctorUsageHistory
 } from "../api";
 import logo from "../assets/ixoralogo.png";
 import doctors from "../assets/doctors.png";
@@ -47,7 +47,7 @@ import { jsPDF } from 'jspdf';
 
 // Mock data for video templates
 
-const BACKEND_BASE_URL = "http://127.0.0.1:8000";
+const BACKEND_BASE_URL = "http://localhost:8000";
 
 function getAbsoluteImageUrl(url) {
   if (!url) return "";
@@ -118,10 +118,10 @@ const Gallery = () => {
   const [selectedContentForDelete, setSelectedContentForDelete] =
     useState(null);
   const [regenerateContentType, setRegenerateContentType] = useState("image");
-  const [showUsageModal, setShowUsageModal] = useState(false);
-  const [selectedDoctorHistory, setSelectedDoctorHistory] = useState([]);
-  const [selectedDoctorName, setSelectedDoctorName] = useState("");
-  const [doctorSharedStatus, setDoctorSharedStatus] = useState({});
+  // const [showUsageModal, setShowUsageModal] = useState(false);
+  // const [selectedDoctorHistory, setSelectedDoctorHistory] = useState([]);
+  // const [selectedDoctorName, setSelectedDoctorName] = useState("");
+  // const [doctorSharedStatus, setDoctorSharedStatus] = useState({});
   const employeeId = getItemInLocalStorage("UserId")?.replace(/"/g, '');
 
   const debugTokens = () => {
@@ -291,25 +291,25 @@ const Gallery = () => {
   }, [searchTerm, selectedSpecialization, page, USERTYPE, EMPID]);
 
 
-  useEffect(() => {
-    const checkAllDoctorsSharedStatus = async () => {
-      if (doctorsData.length > 0) {
-        const statusChecks = doctorsData.map(async (doctor) => {
-          const status = await checkDoctorSharedStatus(doctor.id, employeeId);
-          return { doctorId: doctor.id, ...status };
-        });
+  // useEffect(() => {
+  //   const checkAllDoctorsSharedStatus = async () => {
+  //     if (doctorsData.length > 0) {
+  //       const statusChecks = doctorsData.map(async (doctor) => {
+  //         const status = await checkDoctorSharedStatus(doctor.id, employeeId);
+  //         return { doctorId: doctor.id, ...status };
+  //       });
 
-        const statuses = await Promise.all(statusChecks);
-        const statusMap = {};
-        statuses.forEach(status => {
-          statusMap[status.doctorId] = status;
-        });
-        setDoctorSharedStatus(statusMap);
-      }
-    };
+  //       const statuses = await Promise.all(statusChecks);
+  //       const statusMap = {};
+  //       statuses.forEach(status => {
+  //         statusMap[status.doctorId] = status;
+  //       });
+  //       setDoctorSharedStatus(statusMap);
+  //     }
+  //   };
 
-    checkAllDoctorsSharedStatus();
-  }, [doctorsData, employeeId]);
+  //   checkAllDoctorsSharedStatus();
+  // }, [doctorsData, employeeId]);
 
   const handleNextPage = () => {
     if (nextPageUrl) setPage((prev) => prev + 1);
@@ -1471,7 +1471,7 @@ const Gallery = () => {
         </div>
       )}
 
-      {/* DELETE DOCTOR CONFIRMATION MODAL */}
+      {/* DELETE DOCTOR CONFIRMATION MODAL
       {isDeleteConfirmModalOpen && selectedDoctorForDelete && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg p-6 w-full max-w-md">
@@ -1558,7 +1558,7 @@ const Gallery = () => {
             </div>
           </div>
         </div>
-      )}
+      )} */}
 
       {/* REGENERATE CONTENT MODAL */}
       {isRegenerateModalOpen && selectedDoctorForEdit && (
@@ -2450,48 +2450,10 @@ const Gallery = () => {
                           )}
                         </td>
 
-                        {/* Actions Column with Green Dot + Delete */}
+                        {/* Actions Column - Simplified (removed shared doctor features) */}
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                          <div className="flex items-center space-x-3">
-                            {/* Green dot for shared doctors */}
-                            <button
-                              onClick={async () => {
-                                try {
-                                  const sharedStatus = doctorSharedStatus[doctor.id];
-                                  if (sharedStatus?.isShared) {
-                                    const history = await getDoctorUsageHistory(doctor.id, employeeId);
-                                    setSelectedDoctorHistory(history);
-                                    setSelectedDoctorName(doctor.name);
-                                    setShowUsageModal(true);
-                                  } else {
-                                    toast.info("This doctor hasn't been used by other employees");
-                                  }
-                                } catch (error) {
-                                  toast.error("Failed to load usage history");
-                                }
-                              }}
-                              className={`w-4 h-4 rounded-full ${doctorSharedStatus[doctor.id]?.isShared ? 'bg-green-500 hover:bg-green-600' : 'bg-gray-300'
-                                } transition-colors`}
-                              title={
-                                doctorSharedStatus[doctor.id]?.isShared
-                                  ? "Click to see which employees used this doctor"
-                                  : "Not shared with other employees"
-                              }
-                            />
-
-                            {/* Delete Button */}
-                            <button
-                              onClick={() => {
-                                console.log("Deleting doctor:", doctor.name, "ID:", doctor.id);
-                                setSelectedDoctorForDelete(doctor);
-                                setIsDeleteConfirmModalOpen(true);
-                              }}
-                              className="flex items-center px-2 py-1 text-red-600 hover:text-red-800 hover:bg-red-50 rounded-md transition-colors"
-                              title="Delete Doctor & All Content"
-                            >
-                              <FaTrash size={14} />
-                              <span className="ml-1 text-xs font-medium">Delete</span>
-                            </button>
+                          <div className="flex items-center justify-center">
+                            <span className="text-gray-400 text-xs">—</span>
                           </div>
                         </td>
                       </tr>
@@ -2668,7 +2630,7 @@ const Gallery = () => {
       )
       }
 
-      {/* Usage History Modal */}
+      {/* Usage History Modal
       {showUsageModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg p-6 max-w-2xl w-full mx-4 max-h-96 overflow-y-auto">
@@ -2705,7 +2667,7 @@ const Gallery = () => {
             </div>
           </div>
         </div>
-      )}
+      )} */}
     </div >
   );
 };

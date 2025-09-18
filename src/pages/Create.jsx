@@ -63,9 +63,9 @@ const Create = () => {
     </>
   )}
   
-  <button onClick={()=>navigate('/shared-doctors')} className="pb-2 text-blue-600 font-bold cursor-pointer">
+  {/* <button onClick={()=>navigate('/shared-doctors')} className="pb-2 text-blue-600 font-bold cursor-pointer">
     Shared Doctors
-  </button>
+  </button> */}
  
   <button onClick={handleLogout} className="pb-2 text-red-500 font-bold cursor-pointer">Log Out</button>
   

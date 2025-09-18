@@ -6,9 +6,9 @@ import {
 import toast from "react-hot-toast";
 
 // const BASE_URL = `https://api.videomaker.digielvestech.in`;
-const BASE_URL = window.location.hostname === 'localhost' 
-  ? 'http://localhost:8000' 
-  : 'https://api.videomaker.digielvestech.in';
+const BASE_URL = window.location.hostname === 'localhost'    
+    ? 'http://localhost:8000'    
+    : 'https://api2.digielvestech.in';
 
 
 // Global axios error handler with token refresh
@@ -546,9 +546,9 @@ export const generateImageContent = async (data) => {
   }
 };
 
-export const searchDoctor = async (mobile) => {
+export const searchDoctor = async (mobile, employeeId) => {
   try {
-    const response = await axios.get(`${BASE_URL}/api/search-doctor/?mobile=${mobile}`);
+    const response = await axios.get(`${BASE_URL}/api/search-doctor/?mobile=${mobile}&employee_id=${employeeId}`);
     return response.data;
   } catch (error) {
     console.log("Error searching doctor", error);
