@@ -2205,9 +2205,6 @@ const Gallery = () => {
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Download
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Actions
-                    </th>
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
@@ -2255,12 +2252,10 @@ const Gallery = () => {
                           })}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                          {" "}
-                          {doctor.employee_name}
+                          {doctor.employee?.employee_id || doctor.employee_name || "Unknown"}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                          {" "}
-                          {doctor.rbm_name}
+                          {doctor.employee?.rbm_region || doctor.rbm_name || "Unknown"}
                         </td>
                         {FEATURE_FLAGS.ENABLE_VIDEO_FEATURES && (
                           <>

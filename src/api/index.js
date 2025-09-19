@@ -68,6 +68,29 @@ export const employeelogin = async (data) => {
   }
 };
 
+
+
+export const getRbmRegions = async () => {
+  try {
+    const response = await axios.get(`${BASE_URL}/api/rbm-regions/`);
+    return response.data;
+  } catch (error) {
+    console.log("Error fetching RBM regions", error);
+    throw error;
+  }
+};
+
+export const validateDesignation = async (data) => {
+  try {
+    const response = await axios.post(`${BASE_URL}/api/validate-designation/`, data);
+    return response.data;
+  } catch (error) {
+    console.log("Error validating designation", error);
+    throw error;
+  }
+};
+
+
 export const doctorVideoGeneration = async (FormData) => {
   try {
     console.log("🔍 CALLING VIDEO GENERATION ENDPOINT");

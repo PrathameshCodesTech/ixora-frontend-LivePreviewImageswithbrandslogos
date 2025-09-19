@@ -4,7 +4,7 @@ import loginVideo from '../assets/login.mp4';
 import toast from "react-hot-toast";
 import flower from '../assets/ixoraflower.png'
 import logo from '../assets/ixoralogo.png'
-import { employeelogin ,UpdateLoginFormData } from "../api";
+import { employeelogin, getRbmRegions, validateDesignation } from "../api";
 import { useNavigate } from "react-router-dom";
 import { setItemInLocalStorage , getItemInLocalStorage } from "../utils/loacalStorage";
 
@@ -13,7 +13,10 @@ import { FaEye, FaEyeSlash } from "react-icons/fa6";
 function Login() {
     const navigate = useNavigate();
     const [showPassword, setShowPassword] = useState(false);
-    const [selectedRBM , setSelectedRBM] = useState("")
+    const [selectedRBM, setSelectedRBM] = useState("");
+const [rbmOptions, setRbmOptions] = useState([]);
+const [isValidating, setIsValidating] = useState(false);
+const [validationMessage, setValidationMessage] = useState("");
 
     const togglePasswordVisibility = () => {
         setShowPassword(!showPassword);
@@ -28,6 +31,20 @@ function Login() {
         employeeId:''
     })
 
+
+      // Fetch RBM regions on component mount
+    React.useEffect(() => {
+        const fetchRbmRegions = async () => {
+            try {
+                const response = await getRbmRegions();
+                setRbmOptions(response.rbm_regions || []);
+            } catch (error) {
+                console.error("Error fetching RBM regions:", error);
+                toast.error("Failed to load RBM regions");
+            }
+        };
+        fetchRbmRegions();
+    }, []);
     const handleInputChange = (e) =>{
         const {name , value} = e.target;
         setFormData({
@@ -42,27 +59,52 @@ function Login() {
         }
     }
 
-     const validateForm = () =>{
-        let valid= true;
+     const validateForm = () => {
+        let valid = true;
         const newError = {
-            // email:'',
-            employeeId:''
+            employeeId: ''
+        };
+
+        if (!formData.employeeId.trim()) {
+            newError.employeeId = "Employee ID is required";
+            valid = false;
+        }
+        
+        if (!selectedRBM) {
+            toast.error("Please select an RBM region");
+            valid = false;
         }
 
-        // if(!formData.email.trim()){
-        //     newError.email = "Email is required";
-        //     valid= false
-        // }
-        if(!formData.employeeId.trim()){
-            newError.employeeId= "Employee Id is required";
-            valid= false
+        setErrors(newError);
+        return valid;
+    };
+const handleRBMSelection = async (e) => {
+        const rbmValue = e.target.value;
+        setSelectedRBM(rbmValue);
+        setValidationMessage("");
+        
+        // Validate combination if both fields are filled
+        if (formData.employeeId.trim() && rbmValue) {
+            setIsValidating(true);
+            try {
+                const response = await validateDesignation({
+                    employee_id: formData.employeeId,
+                    rbm_region: rbmValue
+                });
+                
+                if (response.valid) {
+                    setValidationMessage("✅ Valid combination");
+                } else {
+                    setValidationMessage("❌ " + response.message);
+                    setSelectedRBM(""); // Clear invalid selection
+                }
+            } catch (error) {
+                setValidationMessage("❌ Validation failed");
+                setSelectedRBM("");
+            } finally {
+                setIsValidating(false);
+            }
         }
-
-        setErrors(newError)
-        return valid
-     }
-      const handleRBMSelction = (e) => {
-        setSelectedRBM(e.target.value);
     };
      const handleSubmit = async (e) => {
         e.preventDefault();
@@ -72,6 +114,7 @@ function Login() {
         try {
             const response = await employeelogin({
                 employee_id: formData.employeeId,
+                rbm_region: selectedRBM
                 // email: formData.email
             });
     
@@ -106,20 +149,12 @@ function Login() {
             // const isAdmin = response.employee.user_type("Admin")
 
             // console.log("admin things",isAdmin)
-            if(selectedRBM){
-                try {
-                       const updateResponse = await UpdateLoginFormData(id, { 
-                        rbm: selectedRBM
-                    });
-                    console.log("RBM update success:", updateResponse);
-                    toast.success("RBM updated successfully");
-                    
-                } catch (error) {
-                    //  console.error("RBM update error:", updateError);// prathamesh
-                        console.error("RBM update error:", error); 
-                    toast.error("Failed to update RBM");
-                }
-            }
+            // Store new designation fields
+            const designation = response.employee.designation
+            const rbmRegion = response.employee.rbm_region
+            
+            setItemInLocalStorage("Designation", designation)
+            setItemInLocalStorage("RbmRegion", rbmRegion)
 
             const userData = {
                 ...response.employee,
@@ -164,23 +199,6 @@ function Login() {
             <div className="relative z-10 flex w-full max-w-5xl bg-white rounded-lg overflow-hidden shadow-xl/20 border-0 border-blue-50">
                 {/* Left Video - Now matching form height */}
                 <div className="w-1/2 hidden md:block relative h-[600px]">
-                    {/* <video
-                        src={loginVideo}
-                        className="min-h-full min-w-full object-cover"
-                        autoPlay
-                        loop
-                        muted
-                        playsInline
-                        poster={bgImage}
-                    > */}
-                        {/* <source src={loginVideo} type="video/mp4" /> */}
-                        {/* Fallback image if video doesn't load */}
-                        {/* <img 
-                            src={bgImage} 
-                            alt="Login Background" 
-                            className="min-h-80 min-w-70 object-cover" 
-                        /> */}
-                    {/* </video> */}
                     <img src={flower} alt="background"  className="w-auto h-full"/>
                     
                 </div>
@@ -204,30 +222,6 @@ function Login() {
 
                     {/* Form */}
                     <form className="mt-6 space-y-4" onSubmit={handleSubmit}>
-                        {/* <div>
-                            <label className="block text-sm font-medium text-gray-700">
-                                Email
-                            </label>
-                            <div className="relative mt-1">
-                                <input
-                                    type="email"
-                                    name="email"
-                                    value={formData.email}
-    onChange={handleInputChange}
-                                    placeholder="Enter your work email"
-                                    className={`w-full border ${errors.email ? 'border-red-500 ' :'border-gray-300'} rounded px-3 py-2 pl-10 focus:outline-none bg-white focus:ring focus:border-blue-300`}
-                                />
-                                {errors.email && <p className="text-red-500 text-sm">{errors.email}</p>}
-                                <span className="absolute left-3 top-2.5 text-gray-400">
-                                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="currentColor" className="icon icon-tabler icons-tabler-filled icon-tabler-mail">
-                                        <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
-                                        <path d="M22 7.535v9.465a3 3 0 0 1 -2.824 2.995l-.176 .005h-14a3 3 0 0 1 -2.995 -2.824l-.005 -.176v-9.465l9.445 6.297l.116 .066a1 1 0 0 0 .878 0l.116 -.066l9.445 -6.297z" />
-                                        <path d="M19 4c1.08 0 2.027 .57 2.555 1.427l-9.555 6.37l-9.555 -6.37a2.999 2.999 0 0 1 2.354 -1.42l.201 -.007h14z" />
-                                    </svg>
-                                </span>
-                            </div>
-                        </div> */}
-
                         <div>
                             <label className="block text-sm font-medium text-gray-700">
                                 Employee ID
@@ -237,7 +231,7 @@ function Login() {
                                     type={showPassword ? "text" : "password"}
                                     name="employeeId"
                                     value={formData.employeeId}
-    onChange={handleInputChange}
+                                    onChange={handleInputChange}
                                     placeholder="Enter your employee id"
                                     className={`w-full border ${errors.employeeId ? 'border-red-500': 'border-gray-300'} border-gray-300 rounded px-3 py-2 pl-10 pr-10 focus:outline-none focus:ring focus:border-blue-300`}
                                 />
@@ -256,29 +250,32 @@ function Login() {
                                    RBM
                             </label>
                             <div className="relative mt-1 ">
-                              <select name="rbm" id="" value={selectedRBM} onChange={handleRBMSelction} className="w-full border border-gray-300 rounded px-3 py-2  pr-10 focus:ring focus:border-blue-300 text-gray-800 font-medium bg-blue-50" required>
-                                <option value="">Select RBM</option>
-                                <option value="238">Bidyut Nag</option>
-                                <option value="14">Subhankar Dutta</option>
-                                <option value="22">Vinamra Priya</option>
-                                <option value="26">Chiranjeevi Janugani</option>
-                                <option value="36">Muli Vikram</option>
-                                <option value="140">Rudraswamy Y D </option>
-                                <option value="150">Harun Rasheed S</option>
-                                <option value="155">Vacant- Madurai</option>
-                                <option value="232">M R Nikhil</option>
-                                <option value="219">Ajith Mohan</option>
-                                <option value="72">Lalit Kumar</option>
-                                <option value="80">Surinder Singh</option>
-                                <option value="89">Balram Bagaria</option>
-                                <option value="183">Derg Pal Singh</option>
-                                <option value="187">Shobhit Kumar Kesarwani</option>
-                                <option value="108">Amol Kurkute</option>
-                                <option value="193">Ritesh Dilip Wagh</option>
-                                <option value="202">Omprakash Satish Kene</option>
-                                <option value="211">Rohit Ramani Rameshbhai</option>
-                                <option value="120">Vacant- MP</option>
-                              </select>
+                              <select 
+                                    name="rbm" 
+                                    value={selectedRBM} 
+                                    onChange={handleRBMSelection} 
+                                    className="w-full border border-gray-300 rounded px-3 py-2 pr-10 focus:ring focus:border-blue-300 text-gray-800 font-medium bg-blue-50" 
+                                    required
+                                >
+                                    <option value="">Select RBM Region</option>
+                                    {rbmOptions.map((rbm) => (
+                                        <option key={rbm} value={rbm}>
+                                            {rbm}
+                                        </option>
+                                    ))}
+                                </select>
+                                
+                                {/* Validation message */}
+                                {isValidating && (
+                                    <div className="mt-1 text-sm text-blue-600">
+                                        🔄 Validating...
+                                    </div>
+                                )}
+                                {validationMessage && (
+                                    <div className={`mt-1 text-sm ${validationMessage.includes('✅') ? 'text-green-600' : 'text-red-600'}`}>
+                                        {validationMessage}
+                                    </div>
+                                )}
                             </div>
                         </div>
 
@@ -290,50 +287,6 @@ function Login() {
                             Login
                         </button>
                     </form>
-
-                    {/* Or Divider */}
-                    {/* <div className="flex items-center my-4">
-                        <hr className="flex-grow border-gray-300" />
-                        <span className="mx-2 text-sm text-gray-400">Or</span>
-                        <hr className="flex-grow border-gray-300" />
-                    </div> */}
-
-                    {/* Social Login */}
-                    {/* <div className="flex justify-between space-x-4">
-                        <button className="w-full flex items-center justify-center border bg-gray-400 opacity-20 p-2 rounded">
-                            <img
-                                src="https://www.svgrepo.com/show/475656/google-color.svg"
-                                alt="Google"
-                                className="w-5 h-5 mr-2"
-                                aria-disabled
-                            />
-                            <span className="text-sm">Google</span>
-                        </button>
-                        <button className="w-full flex items-center justify-center border p-2 rounded">
-                            <img
-                                src="https://www.svgrepo.com/show/303145/apple-logo.svg"
-                                alt="Apple"
-                                className="w-5 h-5 mr-2"
-                            />
-                            <span className="text-sm">Apple</span>
-                        </button>
-                        <button className="w-full flex items-center justify-center border p-2 rounded">
-                            <img
-                                src="https://www.svgrepo.com/show/475689/twitter-color.svg"
-                                alt="Twitter"
-                                className="w-5 h-5 mr-2"
-                            />
-                            <span className="text-sm">Twitter</span>
-                        </button>
-                    </div> */}
-
-                    {/* Footer */}
-                    {/* <p className="text-sm text-center text-gray-600 mt-6">
-                        Don't have an account?{" "}
-                        <a href="#" className="text-green-700 font-medium">
-                            Sign up
-                        </a>
-                    </p> */}
                 </div>
             </div>
         </div>
